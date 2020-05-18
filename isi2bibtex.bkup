@@ -1,0 +1,1494 @@
+#!/usr/bin/perl -w
+
+# Modified by mike gilchrist 1/2/2005, make sure .isi2bibtexrc file is in home directory
+
+# 2008 modified to add search for pdf in /home/mikeg/References
+# 2008 modified again to make pdf entry consistent with jabRef method.
+## changed so will print out both journal and journal-iso
+## added keywordsplus option
+
+
+=pod
+
+=head1 NAME
+
+isi2bibtex - convert ISI database files to BibTeX format
+
+=cut
+
+# COPYRIGHT INFORMATION
+
+# isi2bibtex version 0.40
+# ISI SCI to BibTeX database format converter
+# Copyright (C) 2000 Jonathan Swinton, Ben Bolker, Anthony Stone, John J. Lee
+
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the Free
+# Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
+
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+# more details.
+
+# You should have received a copy of the GNU General Public License along with
+# this program; if not, write to the Free Software Foundation, Inc., 59 Temple
+# Place, Suite 330, Boston, MA 02111-1307 US
+
+# The maintainer of this program, John J. Lee, may be reached by email at
+# phrxy@csv.warwick.ac.uk
+
+# A copy of the GNU General Public License is available from, for example,
+# http://www.eff.org/
+
+=head1 SYNOPSIS
+
+B<isi2bibtex> [B<OPTIONS>] B<inputfile> [B<outputfile>]
+
+If no output file is specified, inputfile.bib is used.
+
+Records are appended if the output file exists.
+
+=head1 DESCRIPTION
+
+Isi2bibtex converts an ISI (Institute for Scientific Information)
+bibliographic database file to a BibTeX file for use in TeX and LaTeX
+documents.  Both formats hold bibliographic data on scientific and other
+academic documents.
+
+(In the UK, the ISI databases are commonly known as 'BIDS' or 'MIMAS WoS')
+
+Another way to do the same job isi2bibtex does is with bp, which has the
+advantage of converting between many different bibliographic formats and
+character sets.  If you don't want that, isi2bibtex understands BIDS standard
+format in addition to the others, and is stand-alone and so presumably easier
+to get working.
+
+=head2 Options
+
+B<-h>, B<--help> display help and exit
+
+B<-v>, B<--version> display version information and exit
+
+B<-q>, B<--quiet> no informational output
+
+B<-a>, B<--abstract> include abstract in output file
+
+B<-c>, B<--check> make some checks on field contents (default)
+
+B<-n>, B<--nocheck> don't make checks on field contents
+
+=head2 Input databases
+
+Although isi2bibtex was written for SCI (Science Citation Index), all the ISI
+databases should work (SCI, SSCI, A&HCI, ISTP).  Isi2bibtex will probably make
+a bad job of editing the content of these other databases, and would have to
+be changed a bit (not difficult), but you may be lucky.
+
+In the UK, probably most of the other databases on BIDS should work either
+straight away or with a small amount of modification of the script.  BIDS
+Pascal for instance works with downloading format, and would work with a small
+amount of modification with standard format.
+
+=head2 Input formats
+
+If you use a web interface to ISI, isi2bibtex will only convert text output
+(whether emailed or saved directly), not saved web pages or other bibliography
+formats such as Procite or Reference Manager.  Specifically, the formats that
+are understood are:
+
+ISI generic output format version 1.0:
+
+I presume this is the format used in most of the world.
+In the UK, this is output by MIMAS WoS 'save records' or 'email records'.
+
+BIDS standard format:
+
+(any of: Title only; Title, authors & journal; Full record excluding
+citations; Full record)
+
+BIDS downloading format:
+
+(any of: Title, authors & journal in downloading format; Full record in
+downloading format)
+
+
+You can mix and match record formats in one file.  Deleting fields and / or
+record numbers from records should be okay.  Any fields may be present in any
+order.  Don't change the indentation of records: isi2bibtex will ignore
+records if they're too different from the usual layout due to ambiguity of
+field labels and field contents.
+
+=head2 Output fields
+
+For ISI generic format (eg MIMAS WoS output) and BIDS downloading format,
+fields other than title (TI), author (AU), source ie journal (SO), page range
+(BP, EP), year (PY) and abstract (AB) are ignored.
+
+For standard BIDS format, fields other than Title (TI:), author (AU:), journal
+(JN:) and abstract (AB:) are ignored (the JN: field contains the page numbers,
+volume, date, etc as well as the journal name).
+
+At the moment isi2bibtex only outputs the more useful fields, but this may
+change in the future (when someone gets round to it).  Which fields are output
+can be controlled with a configuration file (see below).  Those that don't
+correspond to the standard BibTeX fields (such as abstract) won't be
+recognised by BibTeX by default, but they'll be there if you need to use them.
+
+=head2 Output formatting
+
+Output is tidied up as much as possible, but some editing is still required.
+
+Output formatting defaults can be modified with a configuration file.
+/etc/isi2bibtexrc and ~/.isi2bibtexrc (or whatever you set in the @CONFIG
+variable in the script) are looked at in that order for configuration
+settings, with the latter overriding the former.  See the example
+configuration file provided.
+
+If they are switched on, things like journal title abbreviations and acronym
+capitalisations can be added and removed at the end of the script (very easy
+to do by looking at what's there already).  Newer ISI entries have lower case
+as well as upper, and isi2bibtex always leaves the capitalization as-is for
+those records.
+
+=cut
+
+# TODO
+
+# add field include configs (hash) (check which are standard BibTeX fields)
+
+# check record is an article, (DT: field in BIDS), and allow records for
+# books, proceedings, etc.
+
+# add a properly unique but not very human readable key option, for relatively
+# big databases
+
+# warn of duplicate keys
+
+# Rewrite to detect format of record first, then convert it, rather than
+# guessing each field.  Would make it easy to add BIDS Pascal format etc.
+
+=head1 DOESN'T WORK?
+
+Remember to:
+
+=head2 Unix
+
+set the first line of this script to point to your copy of perl
+(eg. /usr/bin/perl or /usr/local/bin/perl)
+
+make it executable (eg. chmod +x ./isi2bibtex)
+
+put it somewhere your OS can find it (eg ~/bin or /usr/local/bin): you may
+need to change your PATH environment variable
+
+=head2 Microsoft Windows
+
+change the name of this script to isi2bibtex.pl (you'll have to use it as
+
+isi2bibtex.pl [OPTIONS] inputfile.txt outputfile.bib
+
+rather than
+
+isi2bibtex [OPTIONS] inputfile.txt outputfile.bib
+
+because the windows DOS shell doesn't know about the #! line)
+
+put it in your Perl bin directory, eg C:\Perl\bin (obviously if you don't have
+perl installed, you need to do that first: see below)
+
+if that doesn't work check the PATH environment variable contains your perl
+bin directory, and as a last resort try
+
+    perl C:\Perl\bin\isi2bibtex.pl inputfile.txt
+
+=head2 Other platforms
+
+I have no idea, but it should work on any platform that runs Perl 5, perhaps
+with a few small modifications.  Isi2bibtex has been tested on Windows (95 and
+NT) and Unix.  Please send me any portability changes.
+
+Email <jjl@pobox.com> if it still doesn't work.
+
+=head1 KNOWN PROBLEMS
+
+It only does articles, not books, proceedings etc, and won't notice if a
+record isn't an article.
+
+It ignores some fields (mostly those that don't correspond to the standard
+BibTeX 'article' fields).
+
+ISI access providers' output other than BIDS and MIMAS WOS haven't been
+tested.  Send me an output file and I'll make it work with that format (for
+SCI).
+
+Please tell me about any bugs you find, at <jjl@pobox.com>.
+
+=head1 SEE ALSO
+
+If you don't have Perl installed, it can be got (free) from
+http://www.perl.com/ .  LaTeX, BibTeX and everything else TeX can be
+downloaded from http://www.CTAN.org/ .
+
+bp converts between many bibliography database formats (including
+conversion from BIDS downloading and ISI generic formats to BibTeX), and
+many character sets.
+
+Ben Bolker (author of the BIDS / MIMAS WOS specification for bp) has a
+page describing his modifications to bp:
+
+http://www.zoo.ufl.edu/bolker/bp.html
+
+Dana Jacobsen (author of bp) has a web page with lots of bibliography
+software information and details of his bp package:
+
+http://www.ecst.csuchico.edu/~jacobsd/bib/index.html
+
+
+Some other BibTeX utilities that may or may not be useful (these are just
+the ones I've got round to looking at):
+
+bibclean checks and formats BibTeX databases
+
+bibsort sorts BibTeX databases
+
+bib2dvi converts BibTeX databases to DVI files (DVI files are output by
+LaTeX and are DeVice Independent typeset documents, a bit like postscript
+or pdf -- you can read them on most computer systems)
+
+bibextract, citefind and citetags respectively extract BibTeX records from a
+BibTeX database, extract LaTeX references from a LaTeX document, and look up
+LaTeX references in a BibTeX database.
+
+bibindex makes an index for fast lookup by biblook, if you have a huge
+database that needs it I suppose
+
+BibTool is an all-singing all-dancing general purpose BibTeX management
+utility
+
+bibview is a simple interactive searching utility for BibTeX files
+
+findbib gets BibTeX records corresponding to references in a LaTeX file from a
+preprint server (don't know if it still works)
+
+both refer2bibtex and r2bib convert refer files (whatever they are) to BibTeX
+files
+
+tkbibtex is a graphical tool for editing and searching BibTeX databases
+
+Text::BibTeX is a Perl module for doing things to BibTeX databases.
+
+=head1 COPYRIGHT
+
+Copyright (C) 2000 Jonathan Swinton, Ben Bolker, Anthony Stone, John J. Lee
+
+Isi2bibtex replaces and is derived from bids.to.bibtex (as of 29 Jan 1998) and
+isi2bib 0.1.
+
+bids.to.bibtex was based on a perl script written by Jonathan Swinton, and
+subsequently modified by Ben Bolker and Anthony Stone.
+
+isi2bib 0.1 was written by John J. Lee <jjl@pobox.com>
+
+This script is covered by the GPL.  See the script for copyright information.
+
+=head1 FILES
+
+/etc/isi2bibtexrc, ~/.isi2bibtexrc (or whatever you set in the @CONFIG
+variable) are looked at in that order for default configuration settings,
+with the latter overriding the former.  See the example configuration file
+provided.
+
+=head1 VERSION
+
+0.40
+
+=cut
+
+# HISTORY
+#
+# 0.3 first released version
+# 0.31 oops forgot to change version number, was labelled as 0.3
+#   mostly bug fixes
+# 0.32 mostly bug fixes, slightly better formatting
+#   name changed to isi2bibtex from isi2bib because the bp converter
+#   for ISI is also called isi2bib
+# 0.33 bugfix: now insists on indentation of input file being standard due
+#   to ambiguity otherwise (misinterpretation of field contents as
+#   field label)
+# 0.40 added configuration file and some command line switches; worked around
+#   ISI SCI database sometimes having missing JI field; some error checking
+#   for missing fields; bug fixes
+# 0.41 change of email address; tiny bug fixes
+
+use Getopt::Long;
+use Config;
+use FileHandle;
+use Text::Wrap;
+
+$VERSION = 0.40;
+$SCRIPT = 'isi2bibtex';
+if ($Config{'osname'} !~ /win|mac/i) {
+    @CONFIG = (glob("~/.isi2bibtexrc"),);
+} else {
+# put your configuration file name in quotes inside the brackets below:
+    @CONFIG = ();
+}
+
+
+# Default options to alter output formatting
+# -------------------------------------------
+
+#************************************
+# NOTE: USE THE CONFIG FILE INSTEAD!
+#************************************
+
+# can't 'use constant' as it isn't installed everywhere
+$AUTHORKEY = 1;     # use key for record generated from author's
+                    # names and publication date rather than key
+                    # from input file and line number
+$HEADER = 1;        # attach header information to output file
+                    # If you leave several email header sections
+                    # (or other non-record text) in the file,
+                    # header() will run several times.
+# case is only ever guessed for fields that are all in upper case:
+$TITLECASE = 1;     # guess case of title
+$AUTHORCASE = 1;    #       "       authors
+$FORMULACASE = 0;   #       "       chemical formulas
+                    #               and crystal planes (badly)
+$JOURNALCASE = 1;   #       "       journal
+$SPECIAL = 1;       # do some special case cases
+#mikeg: 10/2008 set to 0
+$JABBREV = 0;       # do some journal abbreviations
+
+# MIMAS WOS only option
+#mikeg: 10/2008 set to 0
+$ISOTITLE = 0;      # Use the ISO abbreviated title field (JI)
+                    # instead of SO, the full title.
+                    # If JI is missing, this will use J9 instead.
+                    # If you set this to 0 and use SO, the script
+                    # will abbreviate according to journalabbrev()
+                    # if $JABBREV is set.
+
+# fields to include
+$AUTHOR = 1;
+$TITLE = 1;
+$JOURNAL = 1;
+$JOURNALISO = 1;
+$KEYWORDSPLUS = 1;
+$YEAR = 1;
+$VOLUME = 1;
+$PAGES = 1;
+$ABSTRACT = 0;
+$DATESTAMP = 1; ##add date script was run to entries so that you know when you got the reference.
+# NOT DONE YET:
+#$ISSUE = 0;
+#$MONTH = 0;
+#$ADDRESS = 0;
+#$REFERENCES = 0;
+#$DOCTYPE = 0;
+
+$LINELENGTH = 78;
+$INDENT  = " "x8;
+$INDENTX = " "x2;       # field indenting strings, like so:
+#@ARTICLE{bidstest64,
+#         author = {Braun, J. and Bishop, G. G. and Ermakov, A. V. and
+#           Goncharova, L. V. and Hinch, B. J.},
+#         title = {Adsorption of pf3 on cu(001): ordered overlayer
+# ...
+# note the spaces before the author field ($INDENT) plus the extra
+# spaces before the next line ($INDENTX)
+$INDENT2 = $INDENT.$INDENTX;    # alternative to setting $INDENTX
+# following are for lining up your equals signs and / or '{'s.
+$INDENTB = " "x4;       # indent before padding of field name
+$INDENTA = "= ";        #   "   after           "
+
+$ADASHES = 2;           # join up long words that have been split at the end
+                        # of the line in abstract
+                        # 0: leave as-is
+                        # 1: cut space
+                        # 2: remove the dash as well
+                        # note this won't have an effect unless $ABSFORMAT
+                        # is set to 1
+$TDASHES = 2;           # same as $ADASHES for title
+
+$ABSFORMAT = 1;         # if unset, leave the abstract exactly as-is, and
+                        # don't try to reformat it to fit your line length
+                        # - this is  useful because there are no blank
+                        # lines to mark paragraph breaks in ISI format so
+                        # isi2bibtex can only guess where they are
+$ABSPARAS = 1;          # guess paragraphs in abstract when reformatting
+$PARAGAP = 10;          # how many spaces at end of line after end of
+                        # sentence before guessing this is a para end.
+
+# abstract indentation (only when $ABSFORMAT = 0)
+$ABSLENGTH = 63;        # abstract field line length in the ISI database
+$FORLUCK = 5;
+$ABSINDENT = ' 'x($LINELENGTH - $ABSLENGTH - $FORLUCK);
+
+$CHECK = 1;
+$QUIET = 0;
+$USAGE = 'Usage: '.$SCRIPT.($Config{'osname'} =~ /win/i ? '.pl' : '' ).
+    " [OPTIONS] inputfile [outputfile]\n".
+    "isi2bibtex - convert ISI database files to BibTeX format\n\n".
+    "OPTIONS:\n".
+    "  -h, --help\t\tdisplay this help and exit\n".
+    "  -v, --version\t\tdisplay version number and exit\n".
+    "  -q, --quiet\t\tno informational output\n".
+    "  -a, --abstract\tinclude abstract in output file\n".
+    "  -c, --check\t\tmake some checks on field contents (default)\n".
+    "  -n, --nocheck\t\tdon't make any checks on field contents\n\n".
+#   "  -, --\n".
+    "Try `perldoc isi2bibtex' or 'man isi2bibtex' for more information.\n\n".
+    'Report bugs to <phrxy@csv.warwick.ac.uk>.'."\n";
+
+#************************************
+# NOTE: USE THE CONFIG FILE INSTEAD!
+#************************************
+
+# End of options to alter output formatting
+# -----------------------------------------
+
+# You probably don't need to worry about what's below this point, other
+# than the lists of acronyms, abbreviations, etc. near the end of the
+# script.
+
+sub qwarn ($) {
+    $warning = shift;
+    warn $warning if not $QUIET;
+}
+
+for $config_file (@CONFIG) {
+    read_config($config_file);
+}
+
+Getopt::Long::config('bundling', 'auto_abbrev');
+@option_spec = (
+    "version|v",
+    "help|h",
+    "quiet|q",
+    "abstract|a",
+    "check|c!",
+);
+GetOptions(\%options, @option_spec) or exit;
+#for (@option_spec) {
+#   s/\|.*//;
+#   if (not defined($options{$_})) {
+#       $options{$_} = '';
+#   }
+#}
+
+if ($options{'version'}) {
+    print STDERR "$SCRIPT version $VERSION\n\n".
+    "Copyright (C) 2000 Jonathan Swinton, Ben Bolker, Anthony Stone, ".
+    "John J. Lee\n".
+
+    "This is free software; see the source for copying conditions.  There ".
+    "is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A ".
+    "PARTICULAR PURPOSE.\n";
+    exit;
+}
+if ($options{'help'}) {
+    print STDERR $USAGE;
+    exit;
+}
+
+if (defined $options{'abstract'}) {
+    $ABSTRACT = ($options{'abstract'} ? 1 : 0);
+}
+if (defined $options{'quiet'}) {
+    $QUIET = ($options{'quiet'} ? 1 : 0);
+}
+if (defined $options{'check'}) {
+    $CHECK = ($options{'check'} ? 1 : 0);
+}
+
+$date = gen_date('long', 0);
+
+$Text::Wrap::columns = $LINELENGTH;
+
+$line = "";     # current line of field data
+# actually, bad name: this ends up with a whole field in it
+# $_ is current line as usual
+
+# BIDS format field identifiers
+%name = (
+    'TI'=>'title',
+    'AU'=>'author',
+    'NA'=>'address',
+    'JN'=>'journal',
+#    'J9'=>'j9journal',
+    'JI'=>'journaliso',
+    'PY'=>'year',
+    'VO'=>'volume',
+    'NO'=>'issue',
+    'PG'=>'pages',
+    'AB'=>'abstract',
+#    'KP'=>'keywords', ## not used
+    'ID'=>'keywords' #keywordsPlus
+    #'CR'=>'', 'RF'=>'', 'PA'=>''   # don't know, don't care
+);
+
+# The journal field includes volume, issue, pages and year in BIDS
+# standard format.
+
+# Following are the MIMAS WOS format field identifiers, which claims to be
+# ISI Generic Export Format version 1.0 at the moment.
+# Most are ignored by this script.
+# Can't believe anybody would wan't to use all of these, but here they are
+# anyway
+
+
+%mname = (
+#   'FN'=>'filetype',       # File type 
+#   'VR'=>'version',        # File format version number
+#   'PT'=>'pubtype',        # Publication type
+                            # (eg. book, journal, book in series)
+    'AU'=>'author',
+    'TI'=>'title',          # Article title
+    'SO'=>'sourcetitle',    # eg. journal title, in full
+#   'LA'=>'language',
+#   'DT'=>'doctype',        # eg. review, book, article
+#   'NR'=>'refcount',
+#   'SN'=>'ISSN',
+#   'PU'=>'publisher',
+#   'C1'=>'addresses',      # Research addresses (of all authors)
+#   'DE'=>'authkeywords',   # Author keywords
+    'ID'=>'keywordsplus',   # KeyWords Plus
+    'AB'=>'abstract',
+#   'CR'=>'citedrefs',
+#   'TC'=>'citetimes',      # Times cited
+    'BP'=>'1stpage',
+    'EP'=>'lastpage',
+#   'PG'=>'pagecount',
+    'JI'=>'journaliso',      # ISO source title abbr.
+#   'SE'=>'seriestitle',    # Book series title
+#   'BS'=>'seriessub',      # Book series subtitle
+    'PY'=>'year',           # Publication year
+#   'PD'=>'pubdate',        # Publication date eg. JUN 8
+    'VL'=>'volume',
+#   'IS'=>'issue',
+#   'PN'=>'partno',         # Part number
+#   'SU'=>'supplement',
+#   'SI'=>'special',        # Special issue
+#   'GA'=>'ISIno',          # ISI document delivery number
+#   'PI'=>'pubcity',        # Publisher city
+#   'WP'=>'pubURL',         # Publisher web address
+#   'RP'=>'reprintaddr',    # Reprint address
+#   'CP'=>'patent',         # Cited patent
+    'J9'=>'titleabbr',      # 29-character source title abbr.
+#   'PA'=>'pubaddr',        # Publisher address
+#   'ER'=>'endrecord',
+);
+
+# hash to store fields and also to remember where we are
+@record{'header', 'separator', 'key', 'pdffile', 'title', 'author',
+        'journal', 'journaliso', 'j9journal',
+        'volume', 'year', 'issue', 'pages', 'keywordsplus',
+        'abstract', 'other'} = ('')x16; #mikeg: added pdffile and increased x
+
+for (keys %record) { $record{$_} = '' }
+
+# count of records in total and under the last header
+@recordcount{'total', 'header'} = (0, 0);
+$field = 'header';
+$std = 0;               # BIDS standard format flag
+$mimas = 0;             # MIMAS WOS flag
+
+$temp = '';             # general purpose temp string
+$fileout = '';          # output filename
+$filein = '';           # input filename
+
+
+# If there's only one argument, "file", read that in and output
+# "file.bib".  If there's two arguments, read in first as input, and
+# output to the second:
+
+if ($#ARGV == 1) { $fileout = $ARGV[1] }
+elsif ($#ARGV == 0) { $fileout = join ("",$ARGV[0],'.bib') }
+else { die $USAGE }
+$filein = $ARGV[0];
+$temp = '>';
+if (-e $fileout) {
+    qwarn "isi2bibtex: file $fileout exists: appending records\n" if
+      not $QUIET;
+    $temp = '>>';
+}
+
+open(IPTBIDS, $filein)
+    or die "isi2bibtex: couldn't open $filein for input: $!\n";
+open(OPTBIB, $temp.$fileout)
+    or die "isi2bibtex: couldn't open $fileout for output: $!\n";
+print STDERR
+    "isi2bibtex: converting BIDS file $filein to BibTeX output ".
+      "$fileout...\n" if not $QUIET;
+
+#get date
+my $dateStamp = get_datestamp();
+
+# read BIDS file and convert it
+convert();
+
+
+# output BibTeX file
+print OPTBIB $output;
+close OPTBIB;
+
+# end of main program
+
+
+
+
+sub convert {
+# input loop for ISI/BIDS file
+my $temp = '';
+
+
+while (<IPTBIDS>) {
+    chomp;
+    if (/^\s*Record - / or /^\s*$/) {       # match ISI format record
+        if (/^\s*$/ and $field eq 'header') {
+            # we're still in the header,
+            # and we want to keep this blank line
+            # so don't match yet
+        }
+        else {
+            end_field() if $field eq 'header';
+            if ($field ne 'separator') {
+                end_record() if $field ne 'header';
+                $field = 'separator';
+            }
+            else {
+                # twiddle thumbs - in record separator
+            }
+            next;
+        }
+    }
+    elsif
+    (/(?: {6}|\(\d\)   |\(\d\d\)  |\(\d\d\d\) )([A-Z]{2}): (.*)/) {
+                # match BIDS standard format field
+        if (!$std and $field ne 'separator' and $field ne
+          'header') {
+            # not a standard format record, don't match here
+        }
+        else {
+            end_field();
+            $std = 1;
+            $line = $2;
+            $temp = $1;
+            for ($line) {
+                s/^\s+//;
+                s/\s+$//;
+            }
+            if (defined($name{$temp})) {
+                $field = $name{$temp};
+            }
+            else {
+                $field = 'other';
+            }
+            next;
+        }
+    }
+    elsif
+    (/^([A-Z]{2})- /) {             # match BIDS downloading format field
+        end_field();
+        $temp = $1;
+        if (defined($name{$temp})) {
+            $field = $name{$temp};
+            $line = strip($_);      # extract data
+        }
+        else {
+            $field = 'other';
+        }
+        next;
+    }
+    elsif
+    (/^((?:[A-Z]{2})|J9) /) {       # match MIMAS WOS format field
+        end_field();
+        $mimas = 1;
+        $temp = $1;
+        if (defined($mname{$temp})) {
+            $field = $mname{$temp};
+            $line = strip($_);      # extract data
+            mimas();                # map to output fields
+        }
+        else {
+            $field = 'other';
+        }
+        next;
+    }
+    else {                          # match mid-field line
+# for multiline headers eg Subject: line split over two lines
+        /^\s/ ? ($singleline = 0) : ($singleline = 1);
+# cut whitespace
+        s/^\s+//;
+        s/\s+$//;
+# if we're not in a record and we didn't recognise it, it's a header
+        if ($field eq 'separator' and $_ ne '') {
+            $field = 'header';
+            next;
+        }
+# keep header exactly as it is (other than leading and trailing space)
+# - and the abstract as well if required
+        elsif ($field eq 'header') {
+            if ($singleline) {
+                $line = join("\n", $line, $_);
+            } else {
+                $line = join(" ", $line, $_);
+            }
+        }
+# make MIMAS author format look like BIDS downloading format
+        elsif ($field eq 'author' and $mimas) {
+            $line = join(';', $line, $_);
+        }
+        elsif ($field eq 'title') {
+            $line = join(' ', $line, $_)
+                unless title_dashes();
+        }
+        elsif ($field eq 'abstract') {
+            $line = join("\n".$ABSINDENT, $line, $_);
+        }
+
+# join everything else with a space
+        else { $line = join(' ', $line, $_) }
+    }
+  }
+}
+
+sub title_dashes {
+# cut dashes from title if required
+# abstract dashes are dealt with in abstract() - kludge
+    if ( ($line =~ /\b-$/) and ($TDASHES and $field eq 'title') ) {
+        if ($TDASHES == 2) { $line =~ s/\b-$// }
+        $line = join('', $line, $_);
+    }
+}
+
+sub mimas {
+# map MIMAS fields onto output fields
+# first page should be put in page field
+    if ($field eq '1stpage') { $field = 'pages' }
+# last page no. should be appended to first
+    if ($field eq 'lastpage') {
+        $field = 'pages';
+        $line = $record{'pages'}.'-'.$line;
+    };
+# remember all forms of journal title, decide in end_record() which to use
+    if ($field eq 'sourcetitle') {  # full journal title
+        $field = 'journal';
+    }
+#not needed
+#    if ($field eq 'journaliso') {    # ISO abbr
+#        $field = 'journaliso';
+#    }
+#    if ($field eq 'j9journal') {    # other abbr
+#        $field = 'j9journal';
+#    }
+}
+
+sub strip {
+# get field data out of first line of BIDS downloading / ISI format field
+    my ($string) = $_[0];
+    for ($string) {
+# chop off initial field identifier and whitespace
+        s/^\s*(?:(?:[A-Z]{2})|(?:J9))-?\s*//;
+# chop off trailing whitespace
+        s/\s+$//;
+    }
+    $string;
+}
+
+sub end_field {
+# stuff to do at end of each field
+
+# put the field we have built up in the appropriate part of %record
+    for ($line) {
+        s/^\s+//;
+        s/\s+$//;
+    }
+    $record{$field} = $line;
+    $line = '';
+    if ($field eq 'header') {
+        header() if $HEADER;
+        $recordcount{'header'} = 0;
+    }
+}
+
+sub end_record {
+# stuff to do at end of each record
+# reached end of record, so must have just reached end of the last field
+    end_field();
+    $recordcount{'total'}++;
+    $recordcount{'header'}++;
+#mikeg: commented out in hopes of getting alternative forms printed as well as main
+    if(0){ #do some editing
+	     # substitute one of the other journal title fields if ISO abbr missing
+	     if ($mimas and $ISOTITLE) {
+	       if ($record{'isojournal'} ne '') {
+		 $record{'journal'} = $record{'isojournal'};
+	       } elsif ($record{'j9journal'} ne '') {
+		 $record{'journal'} = $record{'j9journal'};
+		 
+	       }
+	     }
+	 }
+    makejournal();
+    makeauthor();
+# more editing and output record to file
+    key();
+    author() if $AUTHOR;
+    title() if $TITLE;
+    journal() if $JOURNAL;
+    journaliso() if $JOURNALISO;
+    keywordsplus() if $KEYWORDSPLUS;
+    year() if $YEAR;
+    volume() if $VOLUME;
+    pages() if $PAGES;
+    abstract() if $ABSTRACT;
+    pdf(); ##added by mikeg
+    datestamp() if $DATESTAMP;
+    terminator();
+
+# reinitialize variables
+    $field = 'separator';
+    for (keys %record) { $record{$_} = '' }
+    $std = 0;
+    $mimas = 0;
+}
+
+sub makekey {
+# generate unique-ish key for BibTeX to refer to record by
+
+    if ($AUTHORKEY == 1) {
+# make unique-ish key out of first surname + first letter of subsequent
+# authors names, followed by last two digits of year
+# names already in key field from makeauthor()
+        $record{'key'} =~ s/\s*//g;
+# append last two digits of year to flag
+        $record{'key'} .= substr($record{'year'}, -2);
+        $record{'key'} =~ s/ //g;
+    }
+    elsif($AUTHORKEY==2){
+      #custom key routines by mike gilchrist mikeg
+      #add year
+      $record{'key'} .= substr($record{'year'}, -2);
+      $record{'key'} =~ s/ //g;
+    }else {
+# make unique-ish key out of input filename (minus extension) with the
+# current source file line number appended
+# this is probably more likely to be unique than author key, but less
+# intelligible
+        $record{'key'} = $fileout;
+        $record{'key'} =~ s/\.bib//;
+        $record{'key'} .= $.;
+    }
+}
+
+sub check_field($) {
+# check field for sense
+    my $field = shift;
+    my $warn = '';
+    return 1 if not $CHECK;
+    if ($field eq 'pages') {
+        if ($record{$field} !~
+    /^[A-Z]?[ \d]{0,5}-?[A-Z]?[ \\&\d]{1,5}(?:\s*\(\d{1,3}\s+pages?\))?$/) {
+            $warn = "$SCRIPT: warning: missing or unusual page number at ";
+            $warn .= "line ${.}, record $recordcount{'total'}\n";
+            qwarn $warn;
+            return 0;
+        } else { return 1 }
+    }
+    @check_ignore{'abstract', 'year', 'volume'} = (1)x3;
+    return 1 if $check_ignore{$field};
+    if ($record{$field} =~ /(?:^\s*$)|(?:^.{0,2}$)/) {
+        $warn = "$SCRIPT: warning: missing or very short $field field at ";
+        $warn .= "line ${.}, record $recordcount{'total'}\n";
+        qwarn $warn;
+        return 0;
+    }
+    return 1;
+}
+
+sub makeauthor {
+# convert author field to BibTeX format
+    my ($author,$surname,$firstnames,$authsep,$namesep);
+    my @authors;
+
+# set author and name separators for appropriate format
+    if (! $std) {
+        $authsep = q/;/;
+        $namesep = q/, /;
+    }
+    elsif ($std) {
+        $authsep = q/, /;
+        $namesep = q/_/;
+    }
+    @authors = split(/$authsep/, $record{'author'});
+    $record{'key'} = '';
+    foreach $author (@authors) {
+        ($surname, $firstnames) = split(/$namesep/, $author);
+        if ( not (defined($surname) and defined($firstnames)) ) {
+            qwarn "$SCRIPT: badly formed author field at line $.\n";
+            $surname = $author;
+            $firstnames = 'unknown';
+        }
+        for ($firstnames) {
+            s/(\w)/$1. /g;  # add full stops to initials
+            s/^\s+//;       # cut whitespace
+            s/\s+$//;       #       "
+        }
+        if ($AUTHORCASE and ($record{'author'} !~ /[a-z]/)) {
+            $surname = initupper($surname);         # capitalise
+            $surname =~ s/^(Mac|Mc|O')([a-z])/$1\u$2/;
+                                # special cases
+        }
+        $author = "$surname, $firstnames";
+	# get surname of first author, and first letter of other authors' surnames
+        if($AUTHORKEY ==2){
+	  #customization by Mike Gilchrist
+	  #Single author paper: Author98
+	  #Two aquthor papers: AuthoroneAndAuthortwo98
+	  #Three or more author paper AuthoroneEtAl98
+	  if($record{'key'} eq ''){
+	    $record{'key'} = $surname;
+	  }
+	  elsif(@authors==2 && $record{'key'} ne ''){
+	    $record{'key'} .="And$surname";
+	  }
+	  elsif(@authors>=3 && (!($record{'key'}=~/EtAl/))){
+	    $record{'key'} .="EtAl";
+	  }
+	}
+	#original key function
+	else{
+	  if ($record{'key'} eq '') { $record{'key'} = $surname }
+	  else { $record{'key' } .= substr($surname,0,1); }
+	}
+      }
+    $record{'author'} = join (' and ', @authors);
+    makekey();              # make BibTeX unique record key
+    makepdf();
+}
+
+sub makejournal {
+# convert journal field to BibTeX format
+    if ($std) {
+# separate out BibTeX fields from the BIDS journal field
+        $record{'journal'} =~
+            /(.*),\s*(\d{4}),\s*Vol\.\s*(.+?),.*p{1,2}\.\s*(.*)/;
+        $record{'journal'} = $1;
+        $record{'year'} = $2;
+        $record{'volume'} = $3;
+        $record{'pages'} = $4;
+        for (keys %record) {
+            $record{$_} = '' unless defined($record{$_});
+        }
+    }
+# set the case for the journal if it's all in upper caps
+    if ($JOURNALCASE and ($record{'journal'} !~ /[a-z]/)) {
+        $record{'journal'} = initupper($record{'journal'});
+    }
+#mikeg: old code which replaces journal name if abbreviation is present
+if(0){
+    $record{'journal'} = journalabbrev($record{'journal'})
+        if ($JABBREV and ! ($ISOTITLE and $mimas));
+
+    $record{'journaliso'} = journalabbrev($record{'journaliso'})
+        if ($JABBREV and ! ($ISOTITLE and $mimas));
+  }
+}
+
+sub key {
+# output record key
+    my $fld = "\@article"; #made lowercase
+    check_field('key');
+    $output .= pastewrap("{$record{'key'}", "", $fld, $INDENT2);
+}
+
+sub author {
+# output author field
+    my $fld = $INDENT.'author'.$INDENTB.'  '.$INDENTA;
+    $record{'author'} = texsafety($record{'author'});
+    check_field('author');  
+    $output .= ",\n".pastewrap("{$record{'author'}}",
+        "", $fld, $INDENT2);
+}
+
+sub title {
+    my $fld = $INDENT.'title'.$INDENTB.'   '.$INDENTA;
+# set the case for the title if it's all in upper caps
+    if ($TITLECASE and ($record{'title'} !~ /[a-z]/)) {
+        $record{'title'} = firstupper($record{'title'});
+        $record{'title'} = formulas($record{'title'}) if $FORMULACASE;
+        $record{'title'} = special($record{'title'}) if $SPECIAL;
+    }
+    $record{'title'} = texsafety($record{'title'});
+    check_field('title');
+
+    #lines added by mike gilchrist to format titles properly
+    #do substitutions
+    $_=$record{'title'};
+    s/RNA/{RNA}/gi;
+    s/DNA/{DNA}/gi;
+    s/\bescherichia coli\b/\\emph{{E}scherichia coli}/gi;
+    s/\bescherichia-coli\b/\\emph{{E}scherichia-coli}/gi;
+    s/\bSaccharomyces cerevisiae\b/\\emph{{S}accharomyces cerevisiae}/gi;
+    s/\bSaccharomyces-cerevisiae\b/\\emph{{S}accharomyces-cerevisiae}/gi;
+    $record{'title'} = $_;
+#    print "$record{'title'}\n";
+    #end addition
+
+
+    $output .= ",\n".pastewrap("{$record{'title'}}",
+        "", $fld, $INDENT2);
+}
+
+sub journal {
+# output journal field to file
+    my $fld = $INDENT.'journal'.$INDENTB.' '.$INDENTA;
+    $record{'journal'} = texsafety($record{'journal'});
+    check_field('journal');
+    $output .= ",\n".pastewrap("{$record{'journal'}}",
+        "", $fld, $INDENT2);
+}
+
+sub journaliso {
+# output journaliso field to file
+    my $fld = $INDENT.'journal-iso'.$INDENTB.' '.$INDENTA;
+    $record{'journaliso'} = texsafety($record{'journaliso'});
+    #don't check field.  Adds extra \ before \&
+    #check_field('journaliso');
+    $output .= ",\n".pastewrap("{$record{'journaliso'}}",
+        "", $fld, $INDENT2);
+}
+
+sub keywordsplus {
+# output journal field to file
+    my $fld = $INDENT.'keywords'.$INDENTB.' '.$INDENTA;
+    $record{'keywordsplus'} = texsafety($record{'keywordsplus'});
+    check_field('keywordsplus');
+    $output .= ",\n".pastewrap("{$record{'keywordsplus'}}",
+        "", $fld, $INDENT2);
+}
+
+sub year {
+# output year field to file
+    my $fld = $INDENT.'year'.$INDENTB.'    '.$INDENTA;
+    $record{'year'} = texsafety($record{'year'});
+    check_field('year');
+    $output .= ",\n".pastewrap("{$record{'year'}}",
+        "", $fld, $INDENT2);
+}
+
+sub volume {
+# output volume field to file
+    my $fld = $INDENT.'volume'.$INDENTB.'  '.$INDENTA;
+    $record{'volume'} = texsafety($record{'volume'});
+    check_field('volume');
+    $output .= ",\n".pastewrap("{$record{'volume'}}",
+        "", $fld, $INDENT2);
+}
+
+sub pages {
+# output pages field to file
+    my $fld = $INDENT.'pages'.$INDENTB.'   '.$INDENTA;
+    $record{'pages'} = texsafety($record{'pages'});
+    check_field('pages');
+    $output .= ",\n".pastewrap("{$record{'pages'}}", "",
+        $fld, $INDENT2);
+}
+
+sub abstract {
+# output abstract field to file
+    my $fld = $INDENT.'abstract'.$INDENTB.''.$INDENTA;
+    my $abs = '';
+    $record{'abstract'} = texsafety($record{'abstract'});
+    if ($ABSFORMAT) {
+        $record{'abstract'} =~ s/^\s+//mg;      # unindent
+# stick abstract together, guessing paragraph positions if required
+        for (split(/\n/, $record{'abstract'})) {
+            s/^\s+//;
+            s/\s+$//;
+            if (
+                /[.?!]$/
+                and length() < ($ABSLENGTH - $PARAGAP)
+                and $ABSPARAS
+            )
+                { $abs .= $_."\n" }
+            else
+                { $abs .= $_.' ' }
+        }
+        $abs =~ s/ $//;         # cut off final space
+        $abs = ",\n".wrap($fld, $INDENT2, '{'.$abs.'}');
+        for ($abs) {
+            s/\b- \b/-/ if ($ADASHES == 1);
+            s/\b- \b// if ($ADASHES == 2);
+        }
+    }
+    else {
+        if ($record{'abstract'} eq '') {
+            $abs = ",\n".$fld."{}";
+        }
+        else {
+            $abs = ",\n".$fld."{\n";
+            $abs .= $ABSINDENT.$record{'abstract'}."}";
+        }
+    }
+    check_field('abstract');
+    $output .= $abs;
+}
+
+sub terminator {
+# add record terminator to file
+    $output .= "\n}\n\n";
+}
+
+sub header {
+# add informational header to BibTeX output file
+# modify this to insert whatever comments are helpful to you
+# see flags at top of script to turn header off
+    my $temp;
+
+    $temp = "This file was automatically generated from entries from the ISI\n"
+    ."(Institute for Scientific Information) databases of scientific and\n"
+    ."other academic documents, using isi2bibtex version $VERSION, a perl\n"
+    ."script which converts ISI or BIDS format files to BibTeX format files\n"
+    ."for inclusion in documents typeset using the LaTeX document processor.";
+    $output .= pastewrap($temp)."\n\n";
+
+    $temp = "Try perldoc isi2bibtex for instructions, or read the script.";
+    $output .= pastewrap($temp)."\n\n";
+
+# output the whole header
+#$output .= $record{'header'}."\n\n";
+
+# get subject line from header
+    $temp = "This file generated on $date, from file '$filein', which has ".(
+        ($record{'header'} =~ /Subject:\s*(.*)/)
+        ? "the subject line '$1'."
+        : "no subject line.  "
+    );
+    $output .= pastewrap($temp)."\n\n";
+}
+
+sub initupper {
+    my $string = $_[0];
+# capitalise initial letter of every word, lower-case the rest
+    $string =~ s/(\w+)/\u\L$1/g;
+# if you have words like "don't" in your references, try this
+# (pinched from the perlfaq):
+#       $string =~ s/ (
+#               (^\w+)  # at the beginning of the line
+#               |       # or
+#               (\s\w+) # preceded by whitespace
+#               )
+#               /\u\L$1/xg;
+#       $string =~ /([\w']+)/\u\L$1/g;
+    $string;
+}
+
+sub firstupper {
+    my $string = $_[0];
+# capitalise initial letter of every sentence, lower-case the rest
+    $string =~ s/\b(\w)(.*)/\U$1\E\L$2/;
+    $string =~ s/([.?!]\s+)(\l\w)/$1\u$2/g;
+    $string;
+}
+
+sub lowercase {
+    my $string = $_[0];
+# decapitalise everything
+    $string =~ s/(.*)/\L$1/;
+    $string;
+}
+
+sub lowertrivial {
+    my $string = $_[0];
+# decapitalise short words
+    for ($string) {
+#       s/\bA\b/a/g;    # causes trouble eg. Phys. Rev. A
+        s/\bAn\b/an/g;
+        s/\bAnd\b/and/g;
+        s/\bThe\b/the/g;
+        s/\bOf\b/of/g;
+        s/\bTo\b/to/g;
+        s/\bFrom\b/from/g;
+        s/\bIn\b/in/g;
+        s/\bWith\b/with/g;
+    }
+    $string;
+}
+
+sub journalabbrev {
+    my $journal = $_[0];
+# substitute journal abbreviations
+# for MIMAS you can just use the pre-abbreviated title field (see options
+# at top of script)
+# obviously, put stuff in here that makes sense for you
+    for ($journal) {
+        s/\bjournal\b/J./gi;
+        s/\b(chemical|chemistry)\b/Chem./gi;
+        s/\b(physics|physical)\b/Phys./gi;
+        s/\bsociety\b/Soc./gi;
+        s/\bcommunications\b/Comm./gi;
+        s/\btransactions\b/Trans./gi;
+        s/\breviews\b/Rev./gi;
+        s/-chemical\b/ Chem./gi;
+        s/-faraday\b/ Faraday/gi;
+        s/\bdiscussions\b/Disc./gi;
+        s/\bamerican\b/Amer./gi;
+        s/\bapplied\b/Appl./gi;
+        s/\bresearch\b/Res./gi;
+        s/\bcrystallograph[a-z]+\b/Crystallog./gi;
+        s/\bletters\b/Lett./gi;
+        s/\b(surface|surfaces)\b/Surf./gi;
+        s/\b(science|sciences)\b/Sci./gi;
+        s/^Sci\.$/Science/;
+        s/\bphilosoph\l\w+\b/Philos./gi;
+        s/\bengineer\l\w+\b/Engin./gi;
+        s/\bphenomena\b/Phenom./gi;
+        s/\bspectroscop\l\w+\b/Spectrosc./gi;
+        s/\bproceedings\b/Proc./gi;
+        s/\bnational\b/Nat./gi;
+        s/\bacademy\b/Acad./gi;
+        s/\broyal\b/Roy./gi;
+        s/\bopinion\b/Opin./gi;
+        s/\b(material|materials)\b/Mater./gi;
+        s/\bcondensed\b/Cond./gi;
+        s/\bmolec\l\w+\b/Mol./gi;
+        s/\bstructur\l\w+\b/Struct./gi;
+        s/\bmatter\b/Matt./gi;
+        s/\binternational\b/Int./gi;
+        s/\bbulletin\b/Bull./gi;
+        s/\bannual\b/Ann./gi;
+        s/\bcatalysis\b/Catal./gi;
+        s/\breview\b/Rev./gi;
+        s/\btechnolog\l\w+\b/Technol./gi;
+        s/\bprogress\b/Prog./gi;
+        s/\bscientific\b/Sci./gi;
+        s/\binstrument\l\w+\b/Instrum./gi;
+        s/\bvacuum\b/Vac./gi;
+        s/^Vac\.$/Vacuum/;
+
+# you may or may not want to remove these words from journal titles
+#       s/\ba\b//g;
+#       s/\ban\b//gi;
+#       s/\band\b//gi;
+        s/\bthe\b//gi;
+        s/\bof\b//gi;
+#       s/\bto\b//gi;
+#       s/\bfrom\b//gi;
+#       s/\bin\b//gi;
+#       s/\bwith\b//gi;
+
+        $journal = lowertrivial($journal);
+
+        s/\s+/ /g;
+    }
+    $journal
+}
+
+sub special {
+    my $string = $_[0];
+# set case of some special words
+
+# put your own words here
+# note that the upper-case replacement is enclosed in braces so that BibTeX
+# doesn't put it back into lower-case
+    for ($string) {
+        s/\bscf\b/{SCF}/g;
+        s/\bmc(-*)scf\b/{MC$1SCF}/g;
+        s/\bci\b/{CI}/g;
+        s/\b([0-9]-[0-9]+)g\b/{$1G}/g;
+        s/\bdna\b/{DNA}/g;
+        s/\bvanderwaals\b/{Van} der {Waals}/g;
+        s/\bmoller-plesset\b/{M}{\\o}ller--{Plesset}/g;
+#       s/\b\b/{}/g;
+    }
+    $string;
+}
+
+sub formulas {
+    my $string = $_[0];
+# attempt to set case of chemical formulas
+    $string =~ s/(\b\l[a-z]+[1-9]+[a-z0-9]+\b)/{\U$1}/gi;
+# attempt to set crystal planes eg Al(111)
+    $string =~ s/\b(\l[a-z]{1,2}\(\d\d\d\))/{\u$1}/gi;
+    $string;
+}
+
+sub texsafety {
+    my $string = $_[0];
+# escape TeX special characters
+# ie. replace % and & with \% and \&.
+    $string =~  s:\&:\\&:g;
+    $string =~  s:\%:\\%:g;
+    $string;
+}
+
+sub pastewrap {
+    my @strings = @_;
+# paste together lines separated by newlines then wrap text
+# parameters: string, final string, initial tab, tab
+    for ($strings[0]) {
+        s/^\s+//;
+        s/\s+$//;
+        s/\n/ /mg;
+    }
+    foreach $i (1,2,3)
+        { if (! defined $strings[$i]) { $strings[$i] = '' } };
+    $strings[0] .= $strings[1];     # add final newlines or whatever
+    wrap($strings[2], $strings[3], $strings[0]);
+}
+
+sub gen_date ($$) {
+# generate current date string
+# 1st parameter is format:
+#       'long': Monday 23rd December 2000
+#       'short': 2000-12-23
+# 2nd parameter is time flag
+    my ($format, $time) = @_;
+    my ($day_name, $month_name);
+    my @td = localtime(time);
+    my ($min, $hour, $day, $month, $year, $weekday) = @td[1..6];
+    $year += 1900;
+    if ($time) { $time = "${hour}:${min}" }
+    if ($day == 1)      { $ord = 'st' }
+    elsif ($day == 2)   { $ord = 'nd' }
+    elsif ($day == 3)   { $ord = 'rd' }
+    else                { $ord = 'th' }
+    $day_name = (
+        Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
+    )[$weekday];
+    $month_name = (
+        January, February, March, April, May, June, July, August, September,
+        October, November, December
+    )[$month];
+    $year = $td[5] + 1900;
+    if ($format eq 'long') {
+        $date = "$day_name $day$ord $month_name $year";
+    } elsif ($format eq 'short') {
+        $date = "${year}-${month}-${day}";
+    }
+    if ($time) { $date .= $time };
+    $date;
+}
+
+sub read_config ($) {
+    my $file = shift;
+# read configuration file
+    return if not ($fh = new FileHandle($file));
+    while(<$fh>) {
+        next if /^#/;
+        next if /^\s*$/;
+        SWITCH: {
+            /^\s*authorkey\s*=\s*(.*)\s*$/ and $AUTHORKEY = $1, last;
+            /^\s*header\s*=\s*(.*)\s*$/ and $HEADER = $1, last;
+            /^\s*titlecase\s*=\s*(.*)\s*$/ and $TITLECASE = $1, last;
+            /^\s*authorcase\s*=\s*(.*)\s*$/ and $AUTHORCASE = $1, last;
+            /^\s*journalcase\s*=\s*(.*)\s*$/ and $JOURNALCASE = $1, last;
+            /^\s*specialcase\s*=\s*(.*)\s*$/ and $SPECIAL = $1, last;
+            /^\s*formulacase\s*=\s*(.*)\s*$/ and $FORMULACASE = $1, last;
+            /^\s*jabbrev\s*=\s*(.*)\s*$/ and $JABBREV = $1, last;
+            /^\s*isotitle\s*=\s*(.*)\s*$/ and $ISOTITLE = $1, last;
+            /^\s*author\s*=\s*(.*)\s*$/ and $AUTHOR = $1, last;
+            /^\s*title\s*=\s*(.*)\s*$/ and $TITLE = $1, last;
+            /^\s*journal\s*=\s*(.*)\s*$/ and $JOURNAL = $1, last;
+            /^\s*year\s*=\s*(.*)\s*$/ and $YEAR = $1, last;
+            /^\s*volume\s*=\s*(.*)\s*$/ and $VOLUME = $1, last;
+            /^\s*pages\s*=\s*(.*)\s*$/ and $PAGES = $1, last;
+            /^\s*abstract\s*=\s*(.*)\s*$/ and $ABSTRACT = $1, last;
+            /^\s*linelength\s*=\s*(.*)\s*$/ and $LINELENGTH = $1, last;
+            /^\s*indent\s*=\s*"(.*)"\s*$/ and $INDENT = $1, last;
+            /^\s*indentx\s*=\s*"(.*)"\s*$/ and $INDENTX = $1, last;
+            /^\s*indentb\s*=\s*"(.*)"\s*$/ and $INDENTB = $1, last;
+            /^\s*indenta\s*=\s*"(.*)"\s*$/ and $INDENTA = $1, last;
+            /^\s*adashes\s*=\s*(.*)\s*$/ and $ADASHES = $1, last;
+            /^\s*tdashes\s*=\s*(.*)\s*$/ and $TDASHES = $1, last;
+            /^\s*absformat\s*=\s*(.*)\s*$/ and $ABSFORMAT = $1, last;
+            /^\s*absparas\s*=\s*(.*)\s*$/ and $ABSPARAS = $1, last;
+            /^\s*paragap\s*=\s*(.*)\s*$/ and $PARAGAP = $1, last;
+            /^\s*abslength\s*=\s*(.*)\s*$/ and $ABSLENGTH = $1, last;
+            /^\s*quiet\s*=\s*(.*)\s*$/ and $QUIET = $1, last;
+            /^\s*check\s*=\s*(.*)\s*$/ and $CHECK = $1, last;
+#           /^\s*\s*=\s*(.*)\s*$/ and $ = $1, last;
+            die "$SCRIPT: syntax error in config file at line $.\n";
+        }
+    }
+}
+
+sub pdf {
+  my $refdir = "/home/mikeg/References/";
+  my $fullpath;
+    $fullpath = $refdir . $record{'pdffile'};
+  if(length($record{'pdffile'}) > 5){
+#old syntax for previous version of jabRef 10/2008
+#    $output .= ",\n\tpdf\t=".pastewrap("{$record{'pdffile'}}", "", $fld, $INDENT2);
+#new syntax
+    $output .= ",\n\tfile\t=".pastewrap("{$record{'pdffile'}:$fullpath:PDF}");
+  }
+
+}
+
+
+#function added by mikeg to add pdf={} line
+sub makepdf {
+  my $refdir = "/home/mikeg/References/";
+  my $pdffile =$record{'key'};
+
+    $pdffile =~ s/EtAl/.et.al/;
+    $pdffile =~ s/And([A-Z])/.and.$1/;
+    #    $authors = $_ ."*";
+    $pdffile =~ s/([0-9][0-9][a-g]?)/.$1.pdf/;
+    $fullpath = $refdir . $pdffile;
+
+    #    print "$pdffile\n";
+
+    #check to see if file exists
+    if(-e $fullpath){
+
+#mikeg commented following line out to comply with new JabRef syntax 10/2008
+#      $record{'pdffile'} = $fullpath; #"\tpdf =\t{$fullpath},\n";
+      $record{'pdffile'} = $pdffile; #"\tpdf =\t{$fullpath},\n";
+      
+      #print("Creating link to ", $record{'pdffile'}, "\n")
+      }
+    else{
+      print "WARNING: pdf file for $record{'key'} doesn't exist\n";
+    }
+  }
+
+
+sub get_datestamp {
+##routine to get current date.
+## returned as a string.
+##added by mikeg
+##code taken from
+##  http://perl.about.com/od/perltutorials/a/perllocaltime_2.htm
+## 12/14/2010
+## Program seems to get the month off by -1.  Have modified code by adding $month+1
+my @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+my @weekDays = qw(Sun Mon Tue Wed Thu Fri Sat Sun);
+#my @dayOfMonth = qw( 01, 02, 03, 04, 05, 06, 07, 08, 09)
+my ($hour, $minute, $dayOfMonth, $month, $yearOffset, $dayOfWeek, $dayOfYear, $daylightsavings);
+
+##assign values to variables
+($second, $minute, $hour, $dayOfMonth, $month, $yearOffset, $dayOfWeek, $dayOfYear, $daylightSavings) = localtime(time);
+##adjust year
+$year = 1900 + $yearOffset;
+$month = $month+1;
+#reformat time
+#original
+#$theTime = "$hour:$minute:$second, $weekDays[$dayOfWeek] $months[$month] $dayOfMonth, $year";
+my $timeStamp = "$year.$month.$dayOfMonth";
+return($timeStamp);
+}
+
+
+sub datestamp{
+
+  my $timestamp = get_datestamp();
+  print $timestamp . " ";
+  $output .= ",\n\ttimestamp\t={" . $timestamp . "}";
+}
