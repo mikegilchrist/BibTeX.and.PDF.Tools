@@ -1,0 +1,79 @@
+#!/bin/bash
+#
+#get papers from PubMed ID's in bibtex file if possible
+
+if [ "$#" -eq 0 ]; then
+    echo "$0: Script for downloading pdf's based on pubmed IDs in .bib file";
+    echo "usage: <command> BIBFILE TARGETDIR";
+    exit 0
+fi
+
+if [ "$#" -ne 2 ]; then
+    echo "Error in $0:  Two arguments expected: BIBFILE TARGETDIR"
+    exit 1
+fi
+
+BIBFILE=$1;
+TARGETDIR=$2;
+
+#extract PMID list
+pmidlist=($(grep "pmid" $BIBFILE | grep -o "[0-9]\+" | tr '\n' ' ') );
+
+echo "PMID's Extracted ${pmidlist[*]}";
+
+#extract list of file names to use
+filenamelist=($(grep "^[[:space:]]file.= {" $BIBFILE | grep -o "References\/[[:alpha:]].*.pdf" | tr '\n' ' ' | sed 's/References\///g') );
+
+echo "File names to use ${filenamelist[*]}"
+
+
+
+#check to see lengths of filelist and pmid match
+npmids=${#pmidlist[@]}
+nfilenames=${#filenamelist[@]}
+
+
+#printf '%s\n' "${pmidlist[@]}"
+#printf '%s\n' "${filenamelist[@]}"
+
+echo "# PMIDS: $npmids\t# Files: $nfilenames";
+
+if [ $npmids -ne $nfilenames ]; then
+    echo "Error in $0: Number of PubMedIDs in $BIBFILE ($npmids) does not match the number of file names extracted ($nfilenames)."
+    echo "Exiting."
+    exit 1
+fi
+
+
+#premature exit for trouble shooting
+#exit 0
+
+for i in `seq 0 $((npmids-1))`; do
+    if [ -f "$TARGETDIR/toPaperDownload$i.pdf" ]; then  rm "$TARGETDIR/toPaperDownload$i.pdf";fi
+    #to paper modifies the file name so save it to a tmp file and then move it
+    #wait -n;
+    echo "PMID $i: ${pmidlist[$i]}"
+    ~/bin/topaper "${pmidlist[$i]}" "/tmp/toPaperDownload$i";
+    mv -f "/tmp/toPaperDownload$i.pdf" "$TARGETDIR/${filenamelist[$i]}";
+    
+    if [ $? -ne 0 ]; then
+	echo "$0 WARNING: Failed to get ${pmidlist[$i]} \t ${filenamelist[$i]}";
+    fi
+    
+    
+    echo "Move to ~/References and create local link $TARGETDIR/${filenamelist[$i]}?"
+    ls -l $TARGETDIR/${filenamelist[$i]};
+    read TMP;
+    if [[ $TMP == "y" || $TMP == "Y" ]]; then
+	mv "$TARGETDIR/${filenamelist[$i]}" ~/References/.;
+	ln -s "~/References/${filenamelist[$i]}" .;
+    else
+	echo "Remove $TARGETDIR/${filenamelist[$i]}?"
+	read TMP;	
+    	if [[ $TMP == "y" || $TMP == "Y" ]]; then
+           rm "$TARGETDIR/${filenamelist[$i]}";
+	fi
+    fi	
+done
+
+exit 0
