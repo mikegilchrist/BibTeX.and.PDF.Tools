@@ -15,7 +15,9 @@ OLDIFS=$IFS;
 IFS=$'\n';
 
 # Get array of Destination names of articles from tmp.bib 
-eval DESTINATIONS=("$(grep -o "/home/mikeg/References/.*.pdf" /tmp/tmp.bib | tac)");
+# using eval seems to mess things up if there are parentheses in the file name
+#eval DESTINATIONS=("$(grep -o "/home/mikeg/References/.*.pdf" /tmp/tmp.bib |
+DESTINATIONS=("$(grep -o "/home/mikeg/References/.*.pdf" /tmp/tmp.bib | tac)");
 
 NDEST=${#DESTINATIONS[@]}
 
