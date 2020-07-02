@@ -16,8 +16,11 @@ IFS=$'\n';
 
 # Get array of Destination names of articles from tmp.bib 
 # using eval seems to mess things up if there are parentheses in the file name
-#eval DESTINATIONS=("$(grep -o "/home/mikeg/References/.*.pdf" /tmp/tmp.bib |
-DESTINATIONS=("$(grep -o "/home/mikeg/References/.*.pdf" /tmp/tmp.bib | tac)");
+# However, removing it seems to result in other problems
+# So I'm restoring it again
+eval DESTINATIONS=("$(grep -o "/home/mikeg/References/.*.pdf" /tmp/tmp.bib | tac)");
+# Try the line below if the file name has parentheses
+# DESTINATIONS=("$(grep -o "/home/mikeg/References/.*.pdf" /tmp/tmp.bib | tac)");
 
 NDEST=${#DESTINATIONS[@]}
 
