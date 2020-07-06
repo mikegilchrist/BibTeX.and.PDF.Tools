@@ -42,9 +42,9 @@ nfilenames=${#filenamelist[@]}
 echo -e "# PMIDS: $npmids\t# Files: $nfilenames";
 
 if [ $npmids -ne $nfilenames ]; then
-    echo -e "Error in $0: Number of PubMedIDs in $BIBFILE ($npmids) does not match the number of file names extracted ($nfilenames)."
-    echo -e "Exiting."
-    exit 1
+    echo -e "Warning in $0: Number of PubMedIDs in $BIBFILE ($npmids) does not match the number of file names extracted ($nfilenames)."
+    #echo -e "Exiting."
+    #exit 1
 fi
 
 
