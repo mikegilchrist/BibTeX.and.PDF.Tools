@@ -1,0 +1,20 @@
+#use customized entry key
+authorkey = 3
+# include abstract
+abstract = 1
+# get rid of header
+header = 0
+
+# Whether to guess case of various fields and other things.  Case is only ever
+# guessed for fields that are in all upper case.
+titlecase = 1
+authorcase = 1
+journalcase = 1
+
+#don't format abstract
+#absformat = 0
+
+linelength=32760
+
+#not sure what this does
+#isotitle = 0
