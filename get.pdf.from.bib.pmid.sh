@@ -17,7 +17,18 @@ BIBFILE=$1;
 TARGETDIR=$2;
 
 if [ ! -d "$HOME/Repositories/Pubmed-Batch-Download/" ]; then echo -e "Need to download Pubmed-Batch-Download repo from git hub\n Use $ git clone  https://github.com/billgreenwald/Pubmed-Batch-Download.git and place in ~/Repositories. You'll also need to install pip"
+							      exit 1
 fi
+# activate anoconda environment
+# If this fails, it means the local machine does not have the python environment set up properly
+# try running the following command in the Pubmed-Batch-Download
+# $ conda env create -f pubmed-batch-downloader-py3.yml
+# 
+conda activate pubmed-batch-downloader-py3
+if [ $? -ne 0 ]; then
+	echo -e "$0 WARNING: anaconda environment not properly installed.\nIf python anaconda is installed, try running \n\t\$ conda env create -f pubmed-batch-downloader-py3.yml\nfrom the Pubmed-Batch-Download repository";
+    fi
+
 
 #extract PMID list
 pmidlist=($(grep "pmid" $BIBFILE | grep -o "[0-9]\+" | tr '\n' ' ') );
