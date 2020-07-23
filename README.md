@@ -37,4 +37,6 @@ Script also populates the `file = {}' entry as
     - Author1.et.al_Year_article.title_Journal.Title.pdf
 Script relies on .isi2bibtexrc file in home directory for some of this customization.
 
-
+# Issues
+---2xml seems to loose PMID info
+isi uses PM for pubmed ID

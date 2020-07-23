@@ -66,18 +66,20 @@ if [[ $TMP == "y" || $TMP == "Y" ]]; then
 
     fi
 
-    echo "Process downloaded pdfs using bib.move.and.link.sh? (n)";
+    #get the papers if you can added 10/10/19
+    echo "Get papers in /tmp/tmp.bib using pmid, place in ~/References, and make link in current dir? (n)\n(Note need to have Pubmed-Batch-Download/ installed in ~/Repositories, required python libraries installed using anaconda)\n";
+    read TMP;
+    if [[ $TMP == "y" || $TMP == "Y" ]]; then
+	~/bin/get.pdf.from.bib.pmid.sh /tmp/tmp.bib ~/References
+	#exitcode=$($MYCOMMAND /tmp/tmp.bib ~/tmp/tmp);
+    else
+	echo "Not downloading files.\n"
+    fi
+    echo "Process any previously downloaded pdfs using bib.move.and.link.sh? (n)";
     read TMP;
     if [[ $TMP == "y" || $TMP == "Y" ]]; then
 	~/bin/bib.move.and.link.sh
-    #get the papers if you can added 10/10/19
-    else echo "Get papers in /tmp/tmp.bib using pmid and place in references? (n)";
-	 read TMP;
-	 if [[ $TMP == "y" || $TMP == "Y" ]]; then
-	~/bin/get.pdf.from.bib.pmid.sh /tmp/tmp.bib ~/References
-	#exitcode=$($MYCOMMAND /tmp/tmp.bib ~/tmp/tmp);
-	 fi
-	 #echo "exitcode = $exitcode"
+	#echo "exitcode = $exitcode"
     fi
     
     #if [ $exitcode -eq 0 ]; then

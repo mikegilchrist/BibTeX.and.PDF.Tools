@@ -31,7 +31,7 @@ if [ $? -ne 0 ]; then
 
 
 #extract PMID list
-pmidlist=($(grep "pmid" $BIBFILE | grep -o "[0-9]\+" | tr '\n' ' ') );
+pmidlist=($(grep "^ *pmid" $BIBFILE | grep -o "[0-9]\+" | tr '\n' ' ') );
 
 echo -e "PMID's Extracted ${pmidlist[*]}\n";
 
