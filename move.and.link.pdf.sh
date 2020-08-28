@@ -5,13 +5,13 @@
 # 
 # usage: authors (smith.et.al) year (2012) title ("dna replication and stuff") journal ("A Really Good Journal")
 
+# Get command invoked
+command="$0";
+
 if [ "$#" -ne 4 ]; then
     echo "Error in $0:  Four arguments expected: <author info> <year> <article title> <journal name>"
     exit 1
 fi
-
-# Get command invoked
-command="$0";
 
 #strip off leading information
 command=${command##*/}
