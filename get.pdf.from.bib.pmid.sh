@@ -15,6 +15,7 @@ fi
 
 BIBFILE=$1;
 TARGETDIR=$2;
+WHICHCONDA="pubmed-batch-downloader-py3"
 
 if [ ! -d "$HOME/Repositories/Pubmed-Batch-Download/" ]; then echo -e "Need to download Pubmed-Batch-Download repo from git hub\n Use $ git clone  https://github.com/billgreenwald/Pubmed-Batch-Download.git and place in ~/Repositories. You'll also need to install pip"
 							      exit 1
@@ -23,15 +24,18 @@ fi
 # If this fails, it means the local machine does not have the python environment set up properly
 # try running the following command in the Pubmed-Batch-Download
 # $ conda env create -f pubmed-batch-downloader-py3.yml
-# 
-conda activate pubmed-batch-downloader-py3
+#
+
+# Test conda installation
+conda run -n "$WHICHCONDA" python --version
 if [ $? -ne 0 ]; then
-	echo -e "$0 WARNING: anaconda environment not properly installed.\nIf python anaconda is installed, try running \n\t\$ conda env create -f pubmed-batch-downloader-py3.yml\nfrom the Pubmed-Batch-Download repository";
-    fi
+    echo -e "$0 WARNING: Needed anaconda environment not properly installed.\nIf python anaconda is installed, try running \n\t\$ conda env create -f pubmed-batch-downloader-py3.yml\nfrom the Pubmed-Batch-Download repository";
+    exit 1
+fi
 
 
 #extract PMID list
-pmidlist=($(grep "^ *pmid" $BIBFILE | grep -o "[0-9]\+" | tr '\n' ' ') );
+pmidlist=($(grep "^[[:space:]]*pmid" $BIBFILE | grep -o "[0-9]\+" | tr '\n' ' ') );
 
 echo -e "PMID's Extracted ${pmidlist[*]}\n";
 
@@ -68,7 +72,7 @@ for i in `seq 0 $((npmids-1))`; do
     #to paper modifies the file name so save it to a tmp file and then move it
     #wait -n;
     pmid="${pmidlist[$i]}";
-    python3.7 "$HOME/Repositories/Pubmed-Batch-Download/fetch_pdfs.py" -pmids  $pmid -out /tmp/;
+    conda run -n "$WHICHCONDA" python3.7 "$HOME/Repositories/Pubmed-Batch-Download/fetch_pdfs.py" -pmids  $pmid -out /tmp/;
     cp "/tmp/$pmid.pdf" "$TARGETDIR/${filenamelist[$i]}";
     
     if [ $? -ne 0 ]; then
