@@ -20,7 +20,7 @@ command=${command##*/}
 #echo "command argument: $command"
 
 INFILE="$1"
-OUTFILE="$HOME/References${1##[^/]+/}" # remove everything up to file name
+OUTFILE="$HOME/References/${1##[^/]+/}" # remove everything up to file name
 
 mv "$INFILE" "$OUTFILE"
 ln -s "$OUTFILE" .
