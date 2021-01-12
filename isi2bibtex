@@ -1545,7 +1545,7 @@ sub makepdfname {
 	#replace spaces and commas with .
 	$pdffile =~ s{[ ,]+}{.}g;
 	# replace other weird characters, perhaps followed by a ., with a -        
-	$pdffile =~ s{[-:/;\?]+\.?}{-}g;
+	$pdffile =~ s{[-:/;\?!]+\.?}{-}g;
 	$pdffile =~ s{(-_)}{_}g; # deal with - at end of an item
 	$pdffile =~ s{\'}{}g; # remove any apostrophes
 	$pdffile =~ s/\.{2,5}/./g; # replace any double . with a single dash
