@@ -12,6 +12,8 @@
 #    1) accept bibfile argument
 #    2) convert ris to isi using bibutils tools or, better, make code work with xml output of bibutils
 #    3) check if author names, article title, journal name are in all caps, which is often the case with older articles, and convert to appropriate capitalization. 
+# 1/2021: Fix upper case article title bug and removal of ? for pdffile
+
 =pod
 =head1 NAME
 
@@ -874,6 +876,7 @@ sub end_record {
     pages() if $PAGES;
     articlenumber() if $ARTICLENUMBER; ## added by mikeg 08/06/19
     abstract() if $ABSTRACT;
+    makepdfname();  ## moved from author()
     pdf(); ##added by mikeg
     datestamp() if $DATESTAMP; ##added by mikeg
     pmid() if $PMID; ## added by mikeg 06/23/16
@@ -1006,7 +1009,7 @@ sub makeauthor {
       }
     $record{'author'} = join (' and ', @authors);
     makekey();              # make BibTeX unique record key
-    makepdf();
+    # makepdfname();
 }
 
 sub makejournal {
@@ -1507,7 +1510,7 @@ sub articlenumber {
 
 
 #function added by mikeg to add pdf={} line
-sub makepdf {
+sub makepdfname {
   my $refdir = "/home/mikeg/References/";
   my $pdffile =$record{'key'};
 
@@ -1517,11 +1520,12 @@ sub makepdf {
     #    $authors = $_ ."*";
     if(1==0){ #old version when files just consisted of authors and year
 	$pdffile =~ s/([0-9][0-9][a-g]?)/.$1.pdf/;
-    }else{
+    }else{	
 	#new version as of 05/26/16
 	#add _ around year
 	$pdffile =~ s/([1-2][0-9][0-9][0-9][a-g]?)/_$1_/;
 	my $title = $record{'title'};
+	
         #get rid of period at end of title
 	$title =~ s/\.$//;
 	#get rid of any ' in title
@@ -1538,8 +1542,13 @@ sub makepdf {
 	$journal =~ s/^Plos./PLoS./;
 	
 	$pdffile = $pdffile . $title . "_" . $journal . ".pdf";
-	 #replace spaces and other weird characters with .
-	$pdffile =~ s{[ :/;,]+}{.}g;
+	#replace spaces and commas with .
+	$pdffile =~ s{[ ,]+}{.}g;
+	# replace other weird characters, perhaps followed by a ., with a -        
+	$pdffile =~ s{[-:/;\?]+\.?}{-}g;
+	$pdffile =~ s{(-_)}{_}g; # deal with - at end of an item
+	$pdffile =~ s{\'}{}g; # remove any apostrophes
+	$pdffile =~ s/\.{2,5}/./g; # replace any double . with a single dash
     }
     $fullpath = $refdir . $pdffile;
 
