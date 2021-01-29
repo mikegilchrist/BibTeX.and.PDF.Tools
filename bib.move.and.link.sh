@@ -7,7 +7,8 @@
 #
 # 
 # usage: authors (smith.et.al) year (2012) title ("dna replication and stuff") journal ("A Really Good Journal")
-
+#
+# Log:  Added copy.target.and.redirect.link.sh option
 echo "starting script..."
 
 # set IFS to deal with spaces in names
@@ -38,14 +39,13 @@ INDEXDEST='echo "File List";
 
 #get list of pdfs in /tmp
 # Next line works with redefined IFS
- SOURCE=($(ls -trh /tmp/*.{pdf,PDF} | tail -$NDEST));
+SOURCE=($(ls -trh /tmp/*.{pdf,PDF} | tail -$NDEST));
 # A non-IFS approach that doesn't work yet...
 # readarray -t SOURCE < <($(ls -trh /tmp/*.pdf | tail -$NDEST));
 
 
 #print files
 #echo ${SOURCE[@]}
-
 
 for INFILE in "${SOURCE[@]}"; do
     printf "\n\nFirst few lines of PDF file: $INFILE\n";
@@ -55,12 +55,13 @@ for INFILE in "${SOURCE[@]}"; do
     read  IPLUSONE;
     if [[ "$IPLUSONE" -gt "0" ]]; then
 	OUTFILE=${DESTINATIONS[$(($IPLUSONE-1))]};
+	LINKSCREATED+=($OUTFILE); #add element to array; need parentheses
 	DESTINATIONS[$(($IPLUSONE-1))]="(ALREADY MOVED)";
 	echo "moving $INFILE to $OUTFILE";
 	cp -a $INFILE $OUTFILE;
 	ln -s $OUTFILE .;
 	echo "remove $INFILE (n)?"
-	read TMP
+	read TMP;
 	if [[ $TMP == "y" || $TMP == "Y" ]]; then
 	    echo "Removing $INFILE";
 	    rm $INFILE
@@ -68,10 +69,29 @@ for INFILE in "${SOURCE[@]}"; do
 	# TODO: ask to remove entry from tmp.bib file
     else
 	echo "Skipping $INFILE";
+	
     fi
 
 
 done
+
+echo "Use copy.target.and.redirect.links.sh to alter where link points? (useful for working with repos)? [y/n]"
+read TMP;
+if [[ $TMP == "y" || $TMP == "Y" ]]; then
+    declare -a LINKSCREATED=(); #create an array
+    echo "Enter new location for target. (default \"../../References/\"";
+    read TARGET;
+    if [[ $TARGET == "" ]]; then TARGET="../../References/"; fi
+    #    echo "Confirm new target directory (y/n): $TARGET"
+    #    read TMP;
+    #    if [[ $TMP == "y" || $TMP == "Y" ]]; then
+    for INFILE in "${LINKSCREATED[@]}"; do
+	copy.target.and.redirect.links.sh "$INFILE" "$TARGET";
+	# TODO: ask to remove entry from tmp.bib file
+    done
+fi
+
+echo "Okay, we're all done here.";
 
 
 IFS=$OLDIFS;  # probably not necessary
