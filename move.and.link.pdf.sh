@@ -9,7 +9,7 @@
 command="$0";
 
 
-if [ "$#" -ne 1 -a "$#" -ne 2]; then
+if [ "$#" -ne 1 -a "$#" -ne 2 ]; then
     echo "Error in $0:  One or two arguments expected: <dir/filename> <optional target dir>"
     exit 1
 fi
@@ -32,7 +32,7 @@ OUTDIR=$(realpath $OUTDIR); ## Remove any trailing slash
 
 OUTFILE="$OUTDIR/$(basename $1)" # remove everything up to file name
 
-if [ "$command" =~ "move.*.sh" ]; then
+if [[ "$command" =~ move.*.sh ]]; then
   mv "$INFILE" "$OUTFILE";
 else
   cp -a "$INFILE" "$OUTFILE";
