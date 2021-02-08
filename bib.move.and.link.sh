@@ -59,7 +59,7 @@ for INFILE in "${SOURCE[@]}"; do
 	DESTINATIONS[$(($IPLUSONE-1))]="(ALREADY MOVED)";
 	echo "moving $INFILE to $OUTFILE";
 	cp -a $INFILE $OUTFILE;
-	ln -s $OUTFILE .;
+	ln -sr $OUTFILE .;
 	echo "remove $INFILE (n)?"
 	read TMP;
 	if [[ $TMP == "y" || $TMP == "Y" ]]; then

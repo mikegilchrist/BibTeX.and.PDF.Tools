@@ -58,7 +58,7 @@ else
 fi
 
 # For generality, I think I should use $LINK not $LINKBASE
-ln -s "$NEWTARGET" "$LINK";
+ln -sr "$NEWTARGET" "$LINK";
 if [ $? -eq 0 ];
 then
     echo "Success!";
