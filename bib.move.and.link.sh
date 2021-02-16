@@ -82,13 +82,17 @@ if [[ $TMP == "y" || $TMP == "Y" ]]; then
     echo "Enter new location for target. (default \"../../References/\"";
     read TARGET;
     if [[ $TARGET == "" ]]; then TARGET="../../References/"; fi
-    #    echo "Confirm new target directory (y/n): $TARGET"
-    #    read TMP;
-    #    if [[ $TMP == "y" || $TMP == "Y" ]]; then
+#        echo "Confirm new target directory (y/n): $TARGET"
+#        read TMP;
+#        if [[ $TMP == "y" || $TMP == "Y" ]]; then
     for INFILE in "${LINKSCREATED[@]}"; do
-	copy.target.and.redirect.links.sh "$INFILE" "$TARGET";
+	# Had issue with this command adding too many ../../ to it.
+	# I believe it had to do with using $INFILE.
+	# Hopefully fixed by adding command basename
+	copy.target.and.redirect.links.sh "$(basename $INFILE)" "$TARGET";
 	# TODO: ask to remove entry from tmp.bib file
-    done
+	    done
+#	fi
 fi
 
 echo "Okay, we're all done here.";
