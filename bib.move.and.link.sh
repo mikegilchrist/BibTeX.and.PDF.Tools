@@ -78,7 +78,7 @@ done
 echo "Use copy.target.and.redirect.links.sh to alter where link points? (useful for working with repos)? [y/n]"
 read TMP;
 if [[ $TMP == "y" || $TMP == "Y" ]]; then
-    declare -a LINKSCREATED=(); #create an array
+#    declare -a LINKSCREATED=(); #create an array # this doesn't need to be here
     echo "Enter new location for target. (default \"../../References/\"";
     read TARGET;
     if [[ $TARGET == "" ]]; then TARGET="../../References/"; fi
@@ -86,10 +86,9 @@ if [[ $TMP == "y" || $TMP == "Y" ]]; then
 #        read TMP;
 #        if [[ $TMP == "y" || $TMP == "Y" ]]; then
     for INFILE in "${LINKSCREATED[@]}"; do
-	# Had issue with this command adding too many ../../ to it.
-	# I believe it had to do with using $INFILE.
-	# Hopefully fixed by adding command basename
-	copy.target.and.redirect.links.sh "$(basename $INFILE)" "$TARGET";
+	BASE="$(basename $INFILE)";
+	echo "BASE = $BASE; TARGET = $TARGET";
+	copy.target.and.redirect.links.sh "$BASE" "$TARGET";
 	# TODO: ask to remove entry from tmp.bib file
 	    done
 #	fi
