@@ -42,30 +42,37 @@ then
     exit 0;
 fi
 
-cp -f "$TARGET" "$REFDIRNEW/$TARGETBASE" &&
+cp -fp "$TARGET" "$REFDIRNEW/$TARGETBASE" &&
    printf "$TARGET copied to $REFDIRNEW\n"; # ||
 #   { printf "Exiting"; exit 1; }
 # and alternative way to check errors
 # [ $? -neq 0 ] && printf "Copy $LINK to $REFDIRNEW failed\nExiting"
 
-mv -f "$LINK" /tmp/. ;
-if [ $? -eq 0 ];
-then
-    echo "Link moved to /tmp";
-else
-    echo "Link not moved. Exiting";
+
+# test if we should redirect link
+
+if [[ "$0" =~ *redirect.links.sh ]]; then
+
+    mv -f "$LINK" /tmp/. ;
+    if [ $? -eq 0 ];
+    then
+	echo "Link moved to /tmp";
+    else
+	echo "Link not moved. Exiting";
     exit 1;
+    fi
+    
+    # For generality, I think I should use $LINK not $LINKBASE
+    ln -sr "$NEWTARGET" "$LINK";
+    if [ $? -eq 0 ];
+    then
+	echo "Success!";
+	exit 0
+    else
+	echo "Couldn't make link to new target. Restoring link and exiting";
+	mv "/tmp/$LINKBASE" "$LINK";
+	exit 1;
+    fi
 fi
 
-# For generality, I think I should use $LINK not $LINKBASE
-ln -sr "$NEWTARGET" "$LINK";
-if [ $? -eq 0 ];
-then
-    echo "Success!";
-    exit 0
-else
-    echo "Couldn't make link to new target. Restoring link and exiting";
-    mv "/tmp/$LINKBASE" "$LINK";
-    exit 1;
-fi
-
+exit 0

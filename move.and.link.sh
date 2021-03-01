@@ -25,7 +25,7 @@ fi
 
 TARGET="$OUTDIR/$(basename $FILE)";
 
-if [[ "$command" =~ move.*.sh ]]; then
+if [[ "$0" =~ move.*.sh ]]; then
     mv "$FILE" "$TARGET";
 else
     cp -L "$FILE" "$TARGET";
