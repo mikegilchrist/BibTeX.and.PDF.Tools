@@ -1,1 +1,0 @@
-move.and.link.pdf.sh
