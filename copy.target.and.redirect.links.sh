@@ -24,7 +24,7 @@ echo $REFDIRNEW;
 # test if symlink is broken (by seeing if it links to an existing file)
 if [ -h "$LINK" -a ! -e "$LINK"  ] ; then
     # symlink is broken
-    echo "Exiting\n";
+    echo "Symlink $LINK is broken. \nExiting\n";
     exit 1;
 fi
 
@@ -42,7 +42,7 @@ then
     exit 0;
 fi
 
-cp -fp "$TARGET" "$REFDIRNEW/$TARGETBASE" &&
+cp -fp "$TARGET" "$NEWTARGET" &&
    printf "$TARGET copied to $REFDIRNEW\n"; # ||
 #   { printf "Exiting"; exit 1; }
 # and alternative way to check errors
@@ -51,7 +51,7 @@ cp -fp "$TARGET" "$REFDIRNEW/$TARGETBASE" &&
 
 # test if we should redirect link
 
-if [[ "$0" =~ *redirect.links.sh ]]; then
+if [[ "$0" =~ *.redirect\.links.sh ]]; then # added *. at start and \ to .
 
     mv -f "$LINK" /tmp/. ;
     if [ $? -eq 0 ];
@@ -72,7 +72,7 @@ if [[ "$0" =~ *redirect.links.sh ]]; then
 	echo "Couldn't make link to new target. Restoring link and exiting";
 	mv "/tmp/$LINKBASE" "$LINK";
 	exit 1;
-    fi
+    fiv
 fi
 
 exit 0
