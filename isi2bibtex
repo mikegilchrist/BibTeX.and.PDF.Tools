@@ -1473,7 +1473,8 @@ sub pdf {
 #old syntax for previous version of jabRef 10/2008
 #    $output .= ",\n\tpdf\t=".pastewrap("{$record{'pdffile'}}", "", $fld, $INDENT2);
 #new syntax
-    $output .= ",\n\tfile\t= ".pastewrap("{$record{'pdffile'}:$fullpath:PDF}");
+      #    $output .= ",\n\tfile\t= ".pastewrap("{$record{'pdffile'}:$fullpath:PDF}");
+          $output .= ",\n\tfile\t= ".pastewrap("$fullpath:PDF}"); # don't include record entry
   }
 
 }
@@ -1550,7 +1551,8 @@ sub makepdfname {
 	# replace other weird characters, perhaps followed by a ., with a -        
 	$pdffile =~ s{[-:/;\?!]+\.?}{-}g;
 	$pdffile =~ s{([-.]_)}{_}g; # deal with - or . at end of an item
-	$pdffile =~ s{\'}{}g; # remove any apostrophes
+#	$pdffile =~ s{\'}{}g; # remove any apostrophes
+        $pdffile =~ s/[\p{Pi}\p{Pf}'"]//g; # remove most apostrophes per https://stackoverflow.com/a/30620763; 
 	$pdffile =~ s/\.{2,5}/./g; # replace any double . with a single dash
         
     }
