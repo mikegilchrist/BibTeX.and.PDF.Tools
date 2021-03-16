@@ -1550,9 +1550,10 @@ sub makepdfname {
 	$pdffile =~ s{[ ,()]+}{.}g;
 	# replace other weird characters, perhaps followed by a ., with a -        
 	$pdffile =~ s{[-:/;\?!]+\.?}{-}g;
-	$pdffile =~ s{([-.]_)}{_}g; # deal with - or . at end of an item
-#	$pdffile =~ s{\'}{}g; # remove any apostrophes
-        $pdffile =~ s/[\p{Pi}\p{Pf}'"]//g; # remove most apostrophes per https://stackoverflow.com/a/30620763; 
+	$pdffile =~ s{([-._]_)}{_}g; # deal with - or . at end of an item
+#	$pdffile =~ s{\'}{}g; # remove single apostrophes
+#        $pdffile =~ s/[\p{Pi}\p{Pf}'"]//g; # remove most apostrophes per https://stackoverflow.com/a/30620763;
+        $pdffile =~s/[^\w._-]//g; #remove any non-standard characters (\w is a word character)
 	$pdffile =~ s/\.{2,5}/./g; # replace any double . with a single dash
         
     }

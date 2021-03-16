@@ -79,7 +79,7 @@ echo "Use copy.target.and.redirect.links.sh to alter where link points? (useful 
 read TMP;
 if [[ $TMP == "y" || $TMP == "Y" ]]; then
 #    declare -a LINKSCREATED=(); #create an array # this doesn't need to be here
-    echo "Enter new location for target. (default \"../../References/\"";
+    echo "Enter new location for target. (default \"../../References/\")";
     read TARGET;
     if [[ $TARGET == "" ]]; then TARGET="../../References/"; fi
 #        echo "Confirm new target directory (y/n): $TARGET"
