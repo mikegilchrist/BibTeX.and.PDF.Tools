@@ -42,16 +42,21 @@ then
     exit 0;
 fi
 
-cp -fp "$TARGET" "$NEWTARGET" &&
-   printf "$TARGET copied to $REFDIRNEW\n"; # ||
+cp -fp "$TARGET" "$NEWTARGET"
+
+if [ $? -eq 0 ] ; then
+   printf "$TARGET copied to $NEWTARGET in $REFDIRNEW\n"; # ||
+fi
+
 #   { printf "Exiting"; exit 1; }
 # and alternative way to check errors
-# [ $? -neq 0 ] && printf "Copy $LINK to $REFDIRNEW failed\nExiting"
+
 
 
 # test if we should redirect link
+echo "$0"
 
-if [[ "$0" =~ *.redirect\.links.sh ]]; then # added *. at start and \ to .
+if [[ "$0" = *.redirect.links.sh ]]; then # added *. at start and \ to .
 
     mv -f "$LINK" /tmp/. ;
     if [ $? -eq 0 ];
@@ -72,7 +77,7 @@ if [[ "$0" =~ *.redirect\.links.sh ]]; then # added *. at start and \ to .
 	echo "Couldn't make link to new target. Restoring link and exiting";
 	mv "/tmp/$LINKBASE" "$LINK";
 	exit 1;
-    fiv
+    fi
 fi
 
 exit 0

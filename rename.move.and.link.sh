@@ -48,11 +48,11 @@ else
 fi
 
 case $command in
-    "move.and.link.pdf.sh")
+    "rename.move.and.link.sh")
 	printf "Moving file\n\t$INFILE\nto\n\t$OUTFILE and linking\n";
 	mv "$INFILE" ~/References/$OUTFILE; ln -s ~/References/$OUTFILE .;
 	;;
-    "move.and.rename.pdf.sh")
+    "rename.and.move.sh")
     	printf "Moving file\n\t$INFILE\nto\n\t./$OUTFILE\n";
 	mv "$INFILE" ./$OUTFILE;
 	;;
