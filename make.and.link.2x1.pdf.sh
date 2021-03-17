@@ -11,12 +11,12 @@ fi
 FILE="$1";
 NEWFILE="${FILE/.pdf/-2x1.pdf}"
 
-cp -L $FILE /tmp/.  || (echo "Failed to copy $FILE to /tmp; Exiting"; exit 1)
-pdfxup "/tmp/$FILE" || (echo "Failed to run pdfxup on /tmp/$FILE; Exiting"; exit 1) #pdfxup.pdf should be in current dir
-rm -f "/tmp/$FILE" || (echo "Failed to remove /tmp/$FILE ; Exiting"; exit 1)
-mv "pdfxup.pdf" "$NEWFILE"  || (echo "Failed to copy pdfxup.pdf to $NEWFILE"; exit 1)
-mv "$NEWFILE" "$HOME/References/" || (echo "Failed to mv $NEWFILE to ~/References"; exit 1)
-ln -s "$HOME/References/$NEWFILE" . || (echo "Failed to link ~/References/$NEWFILE to local dir"; exit 1)
+cp -L $FILE /tmp/.  || { echo "Failed to copy $FILE to /tmp; Exiting"; exit 1; } # need to use {\  and \ } [note spaces] and not () (which starts a subshell)
+pdfxup "/tmp/$FILE" || { echo "Failed to run pdfxup on /tmp/$FILE; Exiting"; exit 1; } #pdfxup.pdf should be in current dir
+rm -f "/tmp/$FILE" || { echo "Failed to remove /tmp/$FILE ; Exiting"; exit 1; }
+mv "pdfxup.pdf" "$NEWFILE"  || { echo "Failed to copy pdfxup.pdf to $NEWFILE"; exit 1; }
+mv "$NEWFILE" "$HOME/References/" || { echo "Failed to mv $NEWFILE to ~/References"; exit 1; }
+ln -s "$HOME/References/$NEWFILE" . || { echo "Failed to link ~/References/$NEWFILE to local dir"; exit 1; }
 
 echo "Use copy.target.and.redirect.links.sh to alter where link points? (useful for working with repos)? [y/n]"
 read TMP;
@@ -27,6 +27,5 @@ if [[ $TMP == "y" || $TMP == "Y" ]]; then
     if [[ $TARGET == "" ]]; then
         TARGET="../../References/";
     fi
-    copy.target.and.redirect.links.sh "$NEWFILE" "$TARGET" || (echo "Failed to copy.target.and.redirect.links.sh for $NEWFILE and"; exit 1)
+    copy.target.and.redirect.links.sh "$NEWFILE" "$TARGET" || { echo "Failed to copy.target.and.redirect.links.sh for $NEWFILE and"; exit 1; }
 fi
-
