@@ -963,6 +963,7 @@ sub makeauthor {
         $authsep = q/, /;
         $namesep = q/_/;
     }
+    $record{'author'} =~ s/[\[\]]//;
     @authors = split(/$authsep/, $record{'author'});
     $record{'key'} = '';
     foreach $author (@authors) {
@@ -1474,7 +1475,7 @@ sub pdf {
 #    $output .= ",\n\tpdf\t=".pastewrap("{$record{'pdffile'}}", "", $fld, $INDENT2);
 #new syntax
       #    $output .= ",\n\tfile\t= ".pastewrap("{$record{'pdffile'}:$fullpath:PDF}");
-          $output .= ",\n\tfile\t= ".pastewrap("$fullpath:PDF}"); # don't include record entry
+          $output .= ",\n\tfile\t= ".pastewrap("{$fullpath:PDF}"); # don't include record entry
   }
 
 }
