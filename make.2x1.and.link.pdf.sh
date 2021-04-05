@@ -12,7 +12,7 @@ FILE="$1";
 NEWFILE="${FILE/.pdf/-2x1.pdf}"
 
 cp -L "$FILE" /tmp/.  || { echo "Failed to copy $FILE to /tmp; Exiting"; exit 1; } # need to use {\  and \ } [note spaces] and not () (which starts a subshell)
-pdfxup -fw 0 -ps 'letter' "/tmp/$FILE" || { echo "Failed to run pdfxup on /tmp/$FILE; Exiting"; exit 1; } #pdfxup.pdf should be in current dir
+pdfxup -fw 0 -m 30 -ps 'letter' "/tmp/$FILE" || { echo "Failed to run pdfxup on /tmp/$FILE; Exiting"; exit 1; } #pdfxup.pdf should be in current dir
  # Note, because I am using an alias for pdfxup, there's an issue with the exit code from pdfxup not being properly passed.
 rm -f "/tmp/$FILE" || { echo "Failed to remove /tmp/$FILE ; Exiting"; exit 1; }
 mv "pdfxup.pdf" "$NEWFILE"  || { echo "Failed to copy pdfxup.pdf to $NEWFILE"; exit 1; }
