@@ -35,7 +35,7 @@ fi
 
 cp -f /tmp/savedrecs.txt "$ISITMPFILE";  #changed input file due to change by isi
 
-~/bin/isi2bibtex $ISITMPFILE /tmp/tmp.bib;
+~/bin/isi2bibtex "$ISITMPFILE" /tmp/tmp.bib;
 
 echo "Check isi2bibtex output?"
 read TMP;
@@ -88,7 +88,7 @@ if [[ $TMP == "y" || $TMP == "Y" ]]; then
     #    rm -f /tmp/tmp.bib
     echo "Remove /tmp/tmp.bib? (n)";
     read TMP;
-    if [[ $TMP == "y" || $TMP == "Y" ]]; then
+    if [[ "$TMP" == "y" || "$TMP" == "Y" ]]; then
 	rm -f /tmp/tmp.bib;
     else
 	echo "leaving /tmp/tmp.bib";

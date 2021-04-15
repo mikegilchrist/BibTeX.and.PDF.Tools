@@ -23,8 +23,11 @@ VERBOSE=1;
 N="$1"  # of ris files to process
 
 ## Get an array of ris files, newest first, ignoring already processed files
-RISFILES=( $(ls -t /tmp/*.ris --ignore "-used.ris") );
-NRISFILES=${#RISFILES[@]};
+#RISFILES="$(ls -t /tmp/*.ris --ignore \"-used.ris\")";
+# Above doesn't work well when file names have spaces in them.
+# Using readarray and <<< based on: https://unix.stackexchange.com/a/236321 WORKS!
+readarray -t RISFILES <<<"$(ls -t /tmp/*.ris --ignore \"-used.ris\")";
+NRISFILES="${#RISFILES[@]}";
 
 if [ $VERBOSE ]; then
     echo "All matching .ris files in /tmp";
@@ -33,7 +36,7 @@ if [ $VERBOSE ]; then
 fi
 
 ## check array is >= $N
-if [ ${#RISFILES[@]} -lt "$N" ];then 
+if [ "${#RISFILES[@]}" -lt "$N" ];then 
     echo "Error in $0:  The number of .ris files to process is greater than the number in /tmp/ directory.";
     exit 1;
 fi 
@@ -41,7 +44,7 @@ fi
 
 ## Check for pre-existing files
 ## Could offer to append rather than remove
-for FILE in ${OUTFILES[@]}; do 
+for FILE in "${OUTFILES[@]}"; do 
 if [ -f "$FILE" ]; then
     echo "$FILE already exists.";
     echo "Remove file and continue (n)";
@@ -56,6 +59,7 @@ if [ -f "$FILE" ]; then
 fi
 done
 
+RISFILES=( "${RISFILES[@]:0:N}" );
 
 echo "RIS indices: ${!RISFILES[@]}";
 ## Get the first N entries
@@ -63,14 +67,7 @@ echo "RIS indices: ${!RISFILES[@]}";
 ## Can't simply replace entire array with a new one.
 ## Need to unset first
 
-TMP=${RISFILES[@]:0:N};
-unset RISFILES;
-RISFILES=$TMP;
 
-if [ verbose ]; then
-    echo "TMP indices: ${!TMP[@]}";
-    echo "RIS indices: ${!RISFILES[@]}";
-fi
 
 if [ $VERBOSE ]; then
     echo "First $N matching .ris files in /tmp";
@@ -80,8 +77,8 @@ fi
 
 
 ## Create ISIFILE
-for FILE in ${RISFILES[@]}; do
-    echo $FILE;
+for FILE in "${RISFILES[@]}"; do
+    echo "$FILE";
     ris2xml "$FILE" | xml2isi -nb >> "$ISIFILE";
 done
 
