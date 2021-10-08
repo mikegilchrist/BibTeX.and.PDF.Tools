@@ -18,6 +18,15 @@ pdfxup -fw 0 -m 30 -ps 'letter' -o pdfxup.pdf "/tmp/$TMPFILE" || { echo "Failed 
 rm -f "/tmp/$TMPFILE" || { echo "Failed to remove /tmp/$TMPFILE ; Exiting"; exit 1; }
 mv "pdfxup.pdf" "$NEWFILE"  || { echo "Failed to copy pdfxup.pdf to $NEWFILE"; exit 1; }
 
+if [[ "$FILE" == "/tmp/"* ]]; then
+    echo "Move $NEWFILE to local directory? (y)/n"
+    read TMP;
+    if [[ $TMP != "n" || $TMP != "N" ]]; then
+        echo "Moving $NEWFILE to $PWD";
+        mv $NEWFILE .;
+    fi
+fi
+
 if [[ "$0" = *.and.link.pdf.sh ]]; then 
     mv "$NEWFILE" "$HOME/References/" || { echo "Failed to mv $NEWFILE to ~/References"; exit 1; }
     ln -s "$HOME/References/$NEWFILE" . || { echo "Failed to link ~/References/$NEWFILE to local dir"; exit 1; }
