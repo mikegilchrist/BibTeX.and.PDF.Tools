@@ -12,8 +12,16 @@ FILE="$1";
 TMPFILE="tmp-$(basename $FILE)"
 NEWFILE="${FILE/.pdf/-2x1.pdf}"
 
+PAGES=$(pdfinfo $FILE | grep "Pages" | awk '{print $2}')
+
 cp -L "$FILE" "/tmp/$TMPFILE"  || { echo "Failed to copy $FILE to /tmp/$TMPFILE; Exiting"; exit 1; } # need to use {\  and \ } [note spaces] and not () (which starts a subshell)
-pdfxup -fw 0 -m 30 -ps 'letter' -o pdfxup.pdf "/tmp/$TMPFILE" || { echo "Failed to run pdfxup on /tmp/$TMPFILE; Exiting"; exit 1; } #pdfxup.pdf should be in current dir
+
+## Truncate if long file
+if [[ $PAGES -ge 20 ]]; then
+    PAGES=20
+fi
+
+~/bin/pdfxup-local -fw 0 -m 30 -ps 'letter' -V 3 -bb 1-$PAGES -o pdfxup.pdf "/tmp/$TMPFILE" || { echo "Failed to run pdfxup on /tmp/$TMPFILE; Exiting"; exit 1; } #pdfxup.pdf should be in current dir
  # Note, because I am using an alias for pdfxup, there's an issue with the exit code from pdfxup not being properly passed.
 rm -f "/tmp/$TMPFILE" || { echo "Failed to remove /tmp/$TMPFILE ; Exiting"; exit 1; }
 mv "pdfxup.pdf" "$NEWFILE"  || { echo "Failed to copy pdfxup.pdf to $NEWFILE"; exit 1; }
