@@ -12,7 +12,11 @@ FILE="$1";
 TMPFILE="tmp-$(basename $FILE)"
 NEWFILE="${FILE/.pdf/-2x1.pdf}"
 
-PAGES=$(pdfinfo $FILE | grep "Pages" | awk '{print $2}')
+PAGES=$(pdfinfo $FILE | grep "^Pages" | awk '{print $2}')
+
+#echo "Pages: $PAGES"
+#echo "File: $FILE"
+#echo "New File: $NEWFILE"
 
 cp -L "$FILE" "/tmp/$TMPFILE"  || { echo "Failed to copy $FILE to /tmp/$TMPFILE; Exiting"; exit 1; } # need to use {\  and \ } [note spaces] and not () (which starts a subshell)
 
