@@ -20,7 +20,7 @@ else  ## 2x1
     COL=2;
     ROW=1;
     FW=0;
-    LND=0;
+    LND=1;
     SUFF="2x1";
     MAR=5; # was 30
     ISP=0;
