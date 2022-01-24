@@ -8,9 +8,28 @@ if [[ "$#" -ne 1 ]]; then
     exit 1;
 fi
 
+if [[ "$0" = *.4x1.sh ]]; then
+    COL=2;
+    ROW=2;
+    FW=1;
+    LND=1;
+    SUFF="4x1";
+    MAR=5;
+    ISP=0;
+else  ## 2x1
+    COL=2;
+    ROW=1;
+    FW=0;
+    LND=0;
+    SUFF="2x1";
+    MAR=5; # was 30
+    ISP=0;
+fi
+
+    
 FILE="$1";
 TMPFILE="tmp-$(basename $FILE)"
-NEWFILE="${FILE/.pdf/-2x1.pdf}"
+NEWFILE="${FILE/.pdf/-$SUFF.pdf}"
 
 PAGES=$(pdfinfo $FILE | grep "^Pages" | awk '{print $2}')
 
@@ -25,7 +44,20 @@ if [[ $PAGES -ge 20 ]]; then
     PAGES=20
 fi
 
-~/bin/pdfxup-local -fw 0 -m 30 -ps 'letter' -V 3 -bb 1-$PAGES -o pdfxup.pdf "/tmp/$TMPFILE" || { echo "Failed to run pdfxup on /tmp/$TMPFILE; Exiting"; exit 1; } #pdfxup.pdf should be in current dir
+# -V: Verbosity
+# -fw: Frame weight
+# -m: Margins of new document
+# -is: interspace between pages
+~/bin/pdfxup-local -fw "$FW" \
+  -m "$MAR" \
+  -l "$LND" \
+  -x "$COL" \
+  -y "$ROW" \
+  -ps 'letter' \
+  -V 3 \
+  -is $ISP \
+  -bb 1-$PAGES \
+  -o pdfxup.pdf "/tmp/$TMPFILE" || { echo "Failed to run pdfxup on /tmp/$TMPFILE; Exiting"; exit 1; } #pdfxup.pdf should be in current dir
  # Note, because I am using an alias for pdfxup, there's an issue with the exit code from pdfxup not being properly passed.
 rm -f "/tmp/$TMPFILE" || { echo "Failed to remove /tmp/$TMPFILE ; Exiting"; exit 1; }
 mv "pdfxup.pdf" "$NEWFILE"  || { echo "Failed to copy pdfxup.pdf to $NEWFILE"; exit 1; }
