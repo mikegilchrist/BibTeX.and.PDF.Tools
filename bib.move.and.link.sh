@@ -75,7 +75,7 @@ for INFILE in "${SOURCE[@]}"; do
 
 done
 
-echo "Use copy.target.and.redirect.links.sh to alter where link points? (useful for working with repos)? [y/n]"
+echo "Use copy.target.and.redirect.links.sh to alter where link points? (useful for working with repos)? [y/(n)]"
 read TMP;
 if [[ $TMP == "y" || $TMP == "Y" ]]; then
 #    declare -a LINKSCREATED=(); #create an array # this doesn't need to be here
