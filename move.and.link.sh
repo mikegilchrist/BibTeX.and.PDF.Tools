@@ -18,9 +18,19 @@ FILE="$1";
 
 
 if [ "$#" -eq 1 ]; then
-    OUTDIR="../../References"; # default
+    if [[ "$0" =~ *relative.sh ]]; then
+        OUTDIR="../../References";
+    else
+        OUTDIR="$HOME/References";
+    fi
 else
     OUTDIR="$2"; 	
+fi
+
+if [[ "$0" =~ *relative.sh ]]; then
+   OPTS="-sr";
+else
+   OPTS="-s";
 fi
 
 TARGET="$OUTDIR/$(basename $FILE)";
@@ -37,7 +47,9 @@ else
     fi
 fi
 
-ln -sr "$TARGET" .
+
+ln "$OPTS" "$TARGET" .
+
 if [ $? -eq 0 ]; then
     exit 0
 else
