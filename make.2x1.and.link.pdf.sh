@@ -9,6 +9,8 @@
 #    exit 1;
 #fi
 
+
+
 if [[ "$0" = *.4x1.sh ]]; then
     COL=2;
     ROW=2;
@@ -27,11 +29,13 @@ else  ## 2x1
     ISP=0;
 fi
 
+## assume file is last argument
+
     
-FILE="$1";
+FILE="${@: -1}";
 echo "FILE = $FILE"
 
-OPTARGS="${@:2}"
+OPTARGS="${@:1:${#}-1}"
 # I thought OPTARGS might have newlines, but it doesn't seem to
 #OPTARGS=${OPTARGS/$'\n'/ /}
 
@@ -48,9 +52,10 @@ NEWFILE="${FILE/.pdf/-$SUFF.pdf}"
 #fi
 
 #Use page 2 by default
-PAGES=2
+# Commented out due to ability to pass arguments
+# PAGES=2
 #"2-3"
-echo "Pages: $PAGES"
+#echo "Pages: $PAGES"
 echo "Tmp File: $TMPFILE"
 echo "New File: $NEWFILE"
 
@@ -61,11 +66,11 @@ cp -Lf "$FILE" "/tmp/$TMPFILE"  || { echo "Failed to copy $FILE to /tmp/$TMPFILE
 # -fw: Frame weight
 # -m: Margins of new document
 # -is: interspace between pages
+# -nc : no clipping or -c 0
 # Had to remove #  -bb 1-$PAGES \
 
 ~/bin/pdfxup-local \
   -V 2 \
-  -bb "$PAGES" \
   -fw "$FW" \
   -m "$MAR" \
   -l "$LND" \
@@ -73,7 +78,7 @@ cp -Lf "$FILE" "/tmp/$TMPFILE"  || { echo "Failed to copy $FILE to /tmp/$TMPFILE
   -y "$ROW" \
   -is "$ISP" \
   -ps "letter" \
-  -o pdfxup.pdf $OPTARGS "/tmp/$TMPFILE" || { echo "Failed to run pdfxup on /tmp/$TMPFILE; Exiting"; exit 1; } 
+  -o pdfxup.pdf "$OPTARGS" "/tmp/$TMPFILE" || { echo "Failed to run pdfxup on /tmp/$TMPFILE; Exiting"; exit 1; } 
 # NOTE: Don't put quotes around $OPTARGS.  That screws things up, I don't know why.
 #       Perhaps because it is already a string?
 #
