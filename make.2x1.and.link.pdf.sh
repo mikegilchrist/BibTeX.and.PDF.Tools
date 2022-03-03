@@ -78,13 +78,20 @@ cp -Lf "$FILE" "/tmp/$TMPFILE"  || { echo "Failed to copy $FILE to /tmp/$TMPFILE
   -y "$ROW" \
   -is "$ISP" \
   -ps "letter" \
-  -o pdfxup.pdf "$OPTARGS" "/tmp/$TMPFILE" || { echo "Failed to run pdfxup on /tmp/$TMPFILE; Exiting"; exit 1; } 
+  -o pdfxup.pdf $OPTARGS "/tmp/$TMPFILE" || { echo "Failed to run pdfxup on /tmp/$TMPFILE; Exiting"; exit 1; } 
 # NOTE: Don't put quotes around $OPTARGS.  That screws things up, I don't know why.
 #       Perhaps because it is already a string?
 #
 #       pdfxup.pdf should be in current dir
 # 
 #       Because I am using an alias for pdfxup, there's an issue with the exit code from pdfxup not being properly passed.
+
+# This doesn't work
+# Shouldn't need it give || statement at end of pdfxup command
+#if [ $? -ne 0 ]; then
+#	echo "pdfxup command failed. Exiting
+#	exit 1
+#fi
 
 echo "Removing temporary file /tmp/$TMPFILE"
 rm -f "/tmp/$TMPFILE" || { echo "Failed to remove /tmp/$TMPFILE ; Exiting"; exit 1; }
