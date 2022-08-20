@@ -25,8 +25,8 @@ else  ## 2x1
     FW=0;
     LND=1;
     SUFF="2x1";
-    MAR=30;
-    ISP=0;
+    MAR=25;
+    ISP=10;
 fi
 
 ## assume file is last argument
