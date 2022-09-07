@@ -2,12 +2,11 @@
 # make 2x1 version of a paper
 # 
 
-## No longer needed, allow passing of optional arguments
-## FIrst error check
-#if [[ "$#" -ne 1 ]]; then
-#    echo "Error in $0:  One argument expected: <FILE.pdf>";
-#    exit 1;
-#fi
+
+if [[ "$#" -lt 1 ]]; then
+    echo "Error in $0:  A minimum of one argument expected: <FILE.pdf>";
+    exit 1;
+fi
 
 
 
