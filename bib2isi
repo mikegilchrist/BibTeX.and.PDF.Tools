@@ -18,7 +18,7 @@
 #
 # See LICENSE file that comes with this distribution
 #
-# Usage: ris2isi input_ris output_isi
+# Usage: bib2isi input_bib output_isi
 #-------------------------------------------------------------------------------
 # Using ris2xml and xml2isi utilities from:
 # http://bibutils.refbase.org/
@@ -69,7 +69,7 @@ echo "http://bibutils.refbase.org/"
 echo ""
 if test "$#" != 2; then
     cat <<EOF
-Usage: $0 input_ris output_isi
+Usage: $0 input_bib output_isi
 EOF
     exit 2
 fi
@@ -80,17 +80,17 @@ fi
 tmp_dir=$(mktemp -d --tmpdir c2b_tools_tmp.XXXXXXXX)
 
 # Setting files
-ris="$1"
+bib="$1"
 isi="$2"
 work_dir="$PWD"
 
 # Preparing temporary files
-cp "$ris" "${tmp_dir}"/c2b_tmp.ris
-cp "$ris" "${tmp_dir}"/c2b_tmp.isi
+cp "$bib" "${tmp_dir}"/c2b_tmp.bib
+cp "$isi" "${tmp_dir}"/c2b_tmp.isi
 
 # isiutils procedure
 cd "${tmp_dir}"
-"${ris2xml}" ${ris2xml_flags} c2b_tmp.ris > c2b_tmp.xml
+"${bib2xml}" ${bib2xml_flags} c2b_tmp.bib > c2b_tmp.xml
 "${xml2isi}" ${xml2isi_flags} c2b_tmp.xml | sed 's%^ISSUE=%NUMBER=%g' > c2b_tmp.isi
 
 # Clean up
