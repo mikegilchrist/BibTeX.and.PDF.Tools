@@ -1,0 +1,101 @@
+#!/bin/sh
+#-------------------------------------------------------------------------------
+# Created by mikeg 09/23/22 from ris2bib script in cb2Bib tools
+# bib2ris  --  Script to convert BibTeX to ris format
+# cb2Bib Tools
+#
+# Copyright (C) 2005-2017 by Pere Constans
+# constans@molspaces.com
+#
+# Improvements and modifications:
+# Copyright (C) 2009 by Filippo Rusconi
+# rusconi@mnhn.fr
+#
+# May/June 2009:
+# - Added checks to ensure that the used commands are available on
+#   system.
+# - Make use of mktemp to create a temp directory.
+#
+# See LICENSE file that comes with this distribution
+#
+# Usage: bib2ris input_bib output_ris
+#-------------------------------------------------------------------------------
+# Using ris2xml and xml2ris utilities from:
+# http://bibutils.refbase.org/
+#-------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+# Init variables
+#-------------------------------------------------------------------------------
+# Modify accordingly
+#ris2xml=/usr/local/bin/ris2xml
+#xml2bib=/usr/local/bin/xml2bib
+ris2xml=bib2xml #only changed here
+xml2ris=xml2ris
+ris2xml_flags="-u" # use unicode characters - default
+xml2ris_flags="-nb" #-nb = no byte order mark (bom). might want to use '-o unicode' 
+#-------------------------------------------------------------------------------
+
+# Immediately check that the needed programs are there:
+"${ris2xml}" --version > /dev/null 2>&1
+
+if [ "$?" != "0" ]
+then
+    echo "Program ris2xml (suite bibutils) is required."
+    echo "Set it in your path, and/or modify $0 accordingly."
+    echo "Ending processing."
+    exit 1
+fi
+
+"${xml2ris}" --version > /dev/null 2>&1
+
+if [ "$?" != "0" ]
+then
+    echo "Program xml2ris (suite bibutils) is required."
+    echo "Set it in your path, and/or modify $0 accordingly."
+    echo "Ending processing."
+    exit 1
+fi
+
+# Make sure we trap errors (we put that after the tests above because
+# we need the tests to fail, in case, without exiting immediately).
+set -e
+
+# Getting filenames from command line
+echo "cb2Bib Tools: Script to convert RIS format to BibTeX"
+echo ""
+echo "It uses external package bibutils from"
+echo "http://bibutils.refbase.org/"
+echo ""
+if test "$#" != 2; then
+    cat <<EOF
+Usage: $0 input_bib output_ris
+EOF
+    exit 2
+fi
+
+# Create temporary directory
+# Note that we use the mktemp utility that ensures that
+# we do not overwrite any preexisting directory
+tmp_dir=$(mktemp -d --tmpdir c2b_tools_tmp.XXXXXXXX)
+
+# Setting files
+bib="$1"
+ris="$2"
+work_dir="$PWD"
+
+# Preparing temporary files
+cp "$bib" "${tmp_dir}"/c2b_tmp.bib
+cp "$ris" "${tmp_dir}"/c2b_tmp.ris
+
+# risutils procedure
+cd "${tmp_dir}"
+"${bib2xml}" ${bib2xml_flags} c2b_tmp.bib > c2b_tmp.xml
+"${xml2ris}" ${xml2ris_flags} c2b_tmp.xml > c2b_tmp.ris
+
+# Clean up
+cd "${work_dir}"
+cp "${tmp_dir}"/c2b_tmp.ris "$ris"
+rm -rf "${tmp_dir}"
+echo ""
+echo "$0 ended."
