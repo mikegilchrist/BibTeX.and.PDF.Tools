@@ -42,6 +42,13 @@ then
     exit 0;
 fi
 
+if [[ "$NEWTARGET" == "$LINK" ]]; then
+    echo "Target: $NEWTARGET and LINK: $LINK are same location. Not creating link, but copying target to here.";
+    rm "$LINK";
+    cp -fp "$TARGET" "$NEWTARGET";
+    exit 0;
+fi
+
 cp -fp "$TARGET" "$NEWTARGET"
 
 if [ $? -eq 0 ] ; then
@@ -55,11 +62,6 @@ fi
 
 # test if we should redirect link
 echo "$0"
-
-if [[ "$TARGET" == "$LINK" ]]; then
-    echo "Target: $TARGET and LINK: $LINK are same location. Not creating link, but exiting gracefully.";
-    exit 0;
-fi
 
 if [[ "$0" = *.redirect.links.sh ]]; then # added *. at start and \ to .
 
