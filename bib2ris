@@ -30,18 +30,18 @@
 # Modify accordingly
 #ris2xml=/usr/local/bin/ris2xml
 #xml2bib=/usr/local/bin/xml2bib
-ris2xml=bib2xml #only changed here
+bib2xml=bib2xml #only changed here
 xml2ris=xml2ris
-ris2xml_flags="-u" # use unicode characters - default
+bib2xml_flags="-u" # use unicode characters - default
 xml2ris_flags="-nb" #-nb = no byte order mark (bom). might want to use '-o unicode' 
 #-------------------------------------------------------------------------------
 
 # Immediately check that the needed programs are there:
-"${ris2xml}" --version > /dev/null 2>&1
+"${bib2xml}" --version > /dev/null 2>&1
 
 if [ "$?" != "0" ]
 then
-    echo "Program ris2xml (suite bibutils) is required."
+    echo "Program bib2xml (suite bibutils) is required."
     echo "Set it in your path, and/or modify $0 accordingly."
     echo "Ending processing."
     exit 1
@@ -86,7 +86,7 @@ work_dir="$PWD"
 
 # Preparing temporary files
 cp "$bib" "${tmp_dir}"/c2b_tmp.bib
-cp "$ris" "${tmp_dir}"/c2b_tmp.ris
+#cp "$ris" "${tmp_dir}"/c2b_tmp.ris
 
 # risutils procedure
 cd "${tmp_dir}"

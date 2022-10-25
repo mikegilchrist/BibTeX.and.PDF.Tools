@@ -30,18 +30,18 @@
 # Modify accordingly
 #ris2xml=/usr/local/bin/ris2xml
 #xml2bib=/usr/local/bin/xml2bib
-ris2xml=bib2xml #only changed here
+bib2xml=bib2xml #only changed here
 xml2isi=xml2isi
-ris2xml_flags="-u" # use unicode characters - default
+bib2xml_flags="-u" # use unicode characters - default
 xml2isi_flags="-nb" #-nb = no byte order mark (bom). might want to use '-o unicode' 
 #-------------------------------------------------------------------------------
 
 # Immediately check that the needed programs are there:
-"${ris2xml}" --version > /dev/null 2>&1
+"${bib2xml}" --version > /dev/null 2>&1
 
 if [ "$?" != "0" ]
 then
-    echo "Program ris2xml (suite bibutils) is required."
+    echo "Program bib2xml (suite bibutils) is required."
     echo "Set it in your path, and/or modify $0 accordingly."
     echo "Ending processing."
     exit 1
@@ -77,7 +77,7 @@ fi
 # Create temporary directory
 # Note that we use the mktemp utility that ensures that
 # we do not overwrite any preexisting directory
-tmp_dir=$(mktemp -d --tmpdir c2b_tools_tmp.XXXXXXXX)
+tmp_dir=$(mktemp -d c2b_tools_tmp.XXXXXXXX) || exit 1
 
 # Setting files
 bib="$1"
@@ -86,12 +86,11 @@ work_dir="$PWD"
 
 # Preparing temporary files
 cp "$bib" "${tmp_dir}"/c2b_tmp.bib
-cp "$isi" "${tmp_dir}"/c2b_tmp.isi
+#cp "$isi" "${tmp_dir}"/c2b_tmp.isi
 
 # isiutils procedure
 cd "${tmp_dir}"
-"${bib2xml}" ${bib2xml_flags} c2b_tmp.bib > c2b_tmp.xml
-"${xml2isi}" ${xml2isi_flags} c2b_tmp.xml | sed 's%^ISSUE=%NUMBER=%g' > c2b_tmp.isi
+"${bib2xml}" "${bib2xml_flags}" c2b_tmp.bib | "${xml2isi}" "${xml2isi_flags}" | sed 's%^ISSUE=%NUMBER=%g' > c2b_tmp.isi
 
 # Clean up
 cd "${work_dir}"
