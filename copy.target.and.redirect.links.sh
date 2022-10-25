@@ -56,6 +56,11 @@ fi
 # test if we should redirect link
 echo "$0"
 
+if [[ "$TARGET" == "$LINK" ]]; then
+    echo "Target: $TARGET and LINK: $LINK are same location. Not creating link, but exiting gracefully.";
+    exit 0;
+fi
+
 if [[ "$0" = *.redirect.links.sh ]]; then # added *. at start and \ to .
 
     mv -f "$LINK" /tmp/. ;
