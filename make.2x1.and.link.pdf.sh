@@ -8,17 +8,21 @@ if [[ "$#" -lt 1 ]]; then
     exit 1;
 fi
 
+CMD="$(basename $0)";
 
+echo "$CMD"
 
-if [[ "$0" = *.4x1.sh ]]; then
+case "$CMD" in
+    *.4x1.sh|*.2x2.sh)
     COL=2;
     ROW=2;
-    FW=1;
-    LND=1;
-    SUFF="4x1";
+    FW=0;
+    LND=0; # would have expected it to be 1...
+    SUFF="2x2";
     MAR=5;
     ISP=0;
-else  ## 2x1
+    ;;
+   *.2x1.sh)
     COL=2;
     ROW=1;
     FW=0;
@@ -26,8 +30,23 @@ else  ## 2x1
     SUFF="2x1";
     MAR=25;
     ISP=10;
-fi
+    ;;
+   *3x2.sh)
+    COL=2;
+    ROW=3;
+    FW=0;
+    LND=1;
+    SUFF="3x2";
+    MAR=5;
+    ISP=0;
+    ;;
+    *)
+      echo "Unrecognized command: file not processed"
+      ;;
+esac
 
+       #echo "SUFF= $SUFF"
+       
 ## assume file is last argument
 
     
@@ -67,8 +86,8 @@ cp -Lf "$FILE" "/tmp/$TMPFILE"  || { echo "Failed to copy $FILE to /tmp/$TMPFILE
 # -is: interspace between pages
 # -nc : no clipping or -c 0
 # Had to remove #  -bb 1-$PAGES \
-
-~/bin/pdfxup-local \
+# 2023-03-21: Changed from ~/bin/pdfxup-local to pdfxup
+pdfxup \
   -V 2 \
   -fw "$FW" \
   -m "$MAR" \
@@ -78,7 +97,7 @@ cp -Lf "$FILE" "/tmp/$TMPFILE"  || { echo "Failed to copy $FILE to /tmp/$TMPFILE
   -is "$ISP" \
   -ps "letter" \
   -o pdfxup.pdf $OPTARGS "/tmp/$TMPFILE" || { echo "Failed to run pdfxup on /tmp/$TMPFILE; Exiting"; exit 1; } 
-# NOTE: Don't put quotes around $OPTARGS.  That screws things up, I don't know why.
+# NOTE: Don't put quotes around $OPTARGS.  That screws things up, I don't kvnow why.
 #       Perhaps because it is already a string?
 #
 #       pdfxup.pdf should be in current dir
