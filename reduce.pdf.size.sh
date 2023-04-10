@@ -5,14 +5,28 @@
 #
 # Expects 2 argument
 
-if [ "$#" -ne 1 ];
+if [ "$#" -lt 1 ];
 then
-    echo "Error in $0:  Need 1 argument: <FILE>";
+    echo "Error in $0:  Only use one or two arguments: <FILE> <screen/eprint/printer-opt>";
     exit 1;
 fi
 
-# Set resolution could be (lowest) /screen, /ebook, /printer (highest resolution)
-RESOLUTIONLEVEL="/screen"
+if [ "$#" -gt 2 ];
+then
+    echo "Error in $0:  Only use one or two arguments: <FILE> <screen/ebook/printer-opt>";
+    exit 1;
+fi
+
+if [ "$#" -eq 2 ];
+then
+   RESOLUTIONLEVEL="/$2"
+else
+    # Set resolution could be (lowest) /screen, /ebook, /printer (highest resolution)
+    RESOLUTIONLEVEL="/screen"
+fi
+
+
+echo $RESOLUTIONLEVEL
 
 INFILE="$1";
 OUTFILE="${INFILE/.pdf/-reduced.pdf}"
