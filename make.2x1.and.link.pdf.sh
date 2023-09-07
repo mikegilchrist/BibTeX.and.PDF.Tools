@@ -120,7 +120,7 @@ if [[ "$FILE" == "/tmp/"* ]]; then
     read TMP;
     if [[ $TMP != "n" || $TMP != "N" ]]; then
         echo "Moving $NEWFILE to $PWD";
-        mv $NEWFILE .;
+        mv "$NEWFILE" .;
     fi
 fi
 
@@ -134,7 +134,7 @@ if [[ "$0" = *.and.link.pdf.sh ]]; then
         #    declare -a LINKSCREATED=(); #create an array # this doesn't need to be here
         echo "Enter new location for target. (default \"../../References/\")";
         read TARGET;
-        if [[ $TARGET == "" ]]; then
+        if [[ "$TARGET" == "" ]]; then
             TARGET="../../References/";
         fi
         copy.target.and.redirect.links.sh "$NEWFILE" "$TARGET" || { echo "Failed to copy.target.and.redirect.links.sh for $NEWFILE and"; exit 1; }
