@@ -7,7 +7,7 @@
 
 if [ "$#" -lt 1 ];
 then
-    echo "Error in $0:  Only use one or two arguments: <FILE> <screen/eprint/printer-opt>";
+    echo "Error in $0:  Only use one or two arguments: <FILE> <screen/ebook/printer-opt>";
     exit 1;
 fi
 
