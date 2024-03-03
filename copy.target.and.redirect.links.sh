@@ -31,12 +31,15 @@ fi
 LINKBASE="$(basename "$LINK")";
 TARGET="$(readlink "$LINK")";
 TARGETBASE="$(basename "$TARGET")";
-NEWTARGET="$REFDIRNEW/$TARGETBASE";
+if [[ "$REFDIRNEW" -eq "." ]] ; then
+	NEWTARGET="$TARGETBASE";
+else
+  NEWTARGET="$REFDIRNEW/$TARGETBASE";
+fi
 
 
 
-
-if [ "$TARGET" == "$NEWTARGET" ];
+if [[ "$TARGET" == "$NEWTARGET" ]];
 then
     printf "$LINK already points to $NEWTARGET so there's nothing to do\nExiting\n"; 
     exit 0;

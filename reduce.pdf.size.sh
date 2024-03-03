@@ -7,13 +7,13 @@
 
 if [ "$#" -lt 1 ];
 then
-    echo "Error in $0:  Only use one or two arguments: <FILE> <screen/ebook/printer-opt>";
+    echo "Error in $0:  Only use one or two arguments: <FILE> <screen/ebook/printer>";
     exit 1;
 fi
 
 if [ "$#" -gt 2 ];
 then
-    echo "Error in $0:  Only use one or two arguments: <FILE> <screen/ebook/printer-opt>";
+    echo "Error in $0:  Only use one or two arguments: <FILE> <screen/ebook/printer> (you may need to put argument in quotes).";
     exit 1;
 fi
 
@@ -21,8 +21,8 @@ if [ "$#" -eq 2 ];
 then
    RESOLUTIONLEVEL="/$2"
 else
-    # Set resolution could be (lowest) /screen, /ebook, /printer (highest resolution)
-    RESOLUTIONLEVEL="/screen"
+    # Set resolution could be (lowest) /screen, /ebook, /default, /printer (highest resolution)
+    RESOLUTIONLEVEL="/ebook"
 fi
 
 
