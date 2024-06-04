@@ -16,5 +16,5 @@ journalcase = 1
 
 linelength=32760
 
-#not sure what this does
-#isotitle = 0
+#Include iso title
+isotitle = 1
