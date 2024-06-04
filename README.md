@@ -17,7 +17,17 @@ This code relies on the program `pdfxup` and is not documented further.
   - > [~/] $ ln -s  ~/Repositories/BiBTeX.and.PDF.Tools/isi2bibtexrc .isi2bibtexrc
   Note the inclusino of the leading `.` in the name of the created link.
   
-# Pipeline
+
+# Requirements
+
+Code uses and requires the following folders to exist in your home directory
+
+- `~/BiBTeX`
+- `~/References`
+ 
+Code assumes downloaded PDF and .RIS files are in `/tmp`
+
+# Pipeline (Usage)
 
 ## Automated (Recommended)
 
