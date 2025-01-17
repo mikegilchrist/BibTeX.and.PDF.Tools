@@ -23,6 +23,7 @@ This code relies on the program `pdfxup` and is not documented further.
 Code uses and requires the following folders to exist in your home directory
 
 - `~/BiBTeX`
+- `~/BiBTeX/Bkups`
 - `~/References`
  
 Code assumes downloaded PDF and .RIS files are in `/tmp`
