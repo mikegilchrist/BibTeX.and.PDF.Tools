@@ -49,6 +49,34 @@ case "$CMD" in
     MAR=5;
     ISP=0;
     ;;
+   *3x3.sh)
+    COL=3;
+    ROW=3;
+    FW=0;
+    LND=0;
+    SUFF="3x3";
+    MAR=5;
+    ISP=0;
+    ;;
+   *4x3.sh)
+    COL=3;
+    ROW=4;
+    FW=0;
+    LND=0;
+    SUFF="4x3";
+    MAR=5;
+    ISP=0;
+    ;;
+   *5x3.sh)
+    COL=3;
+    ROW=5;
+    FW=0;
+    LND=0;
+    SUFF="5x3";
+    MAR=5;
+    ISP=0;
+    ;;
+
     *)
       echo "Unrecognized command: file not processed"
       ;;
