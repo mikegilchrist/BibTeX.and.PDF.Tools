@@ -13,12 +13,21 @@ CMD="$(basename $0)";
 echo "$CMD"
 
 case "$CMD" in
-    *.4x1.sh|*.2x2.sh)
+    *.2x2.sh)
     COL=2;
     ROW=2;
     FW=0;
     LND=0; # would have expected it to be 1...
     SUFF="2x2";
+    MAR=5;
+    ISP=0;
+    ;;
+    *.2x2L.sh)
+    COL=2;
+    ROW=2;
+    FW=0;
+    LND=1; # would have expected it to be 1...
+    SUFF="2x2L";
     MAR=5;
     ISP=0;
     ;;

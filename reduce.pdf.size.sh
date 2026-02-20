@@ -1,74 +1,106 @@
 #!/bin/bash
 #
 # Script to reduce the size of a PDF file.
-# Supports predefined quality levels or custom numeric resolution.
-#
-# Expects 1 or 2 arguments:
-#   ./script.sh <FILE> [screen/ebook/printer or resolution]
+# Supports quality levels: screen, ebook, printer OR numeric resolution (DPI).
+# Flags:
+#   -f  → Force rasterization (converts vector content to images)
+#   -s  → Silent mode (suppress all normal output)
 #
 # Author: Mike Gilchrist with ChatGPT engine Bishop Bash
-# Version: 1.4
+# Version: 1.7
 # Date: 2025-02-27
 
-# Validate the number of arguments
-if [ "$#" -lt 1 ]; then
-    echo "Error in $0: Only use one or two arguments: <FILE> [screen/ebook/printer or resolution]";
-    exit 1;
+FORCE_RASTER=false
+SILENT=false
+
+# Parse flags
+while getopts ":fs" opt; do
+  case $opt in
+    f) FORCE_RASTER=true ;;
+    s) SILENT=true ;;
+    \?) echo "Invalid option: -$OPTARG" >&2; exit 1 ;;
+  esac
+done
+shift $((OPTIND - 1))
+
+# Validate remaining arguments
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+    echo "Usage: $0 [-f] [-s] <input.pdf> [screen|ebook|printer|resolution]"
+    exit 1
 fi
 
-if [ "$#" -gt 2 ]; then
-    echo "Error in $0: Only use one or two arguments: <FILE> [screen/ebook/printer or resolution] (you may need to put the argument in quotes).";
-    exit 1;
-fi
-
-# Set input file and output file name
 INFILE="$1"
 OUTFILE="${INFILE/.pdf/-reduced.pdf}"
 
-# Validate that the input file exists
+# Function to print only when not in silent mode
+vprint() {
+    $SILENT || echo "$@"
+}
+
+# Validate input file
 if [ ! -f "$INFILE" ]; then
     echo "Error: Input file '$INFILE' not found."
     exit 1
 fi
 
-# Set default to /ebook if no second argument is provided
+# Default quality/resolution
 QUALITY_OPTION="-dPDFSETTINGS=/ebook"
-RESOLUTION=150  # Default resolution (used only if number is provided)
+RESOLUTION=150
 
-# Check if a second argument is provided
+# If second argument is provided
 if [ "$#" -eq 2 ]; then
-    RESOLUTIONLEVEL="$2"
-
-    # Check for predefined quality levels
-    if [[ "$RESOLUTIONLEVEL" == "screen" || "$RESOLUTIONLEVEL" == "ebook" || "$RESOLUTIONLEVEL" == "printer" ]]; then
-        # Use predefined PDF settings
-        QUALITY_OPTION="-dPDFSETTINGS=/$RESOLUTIONLEVEL"
-        echo "Using predefined quality level: $RESOLUTIONLEVEL"
-    elif [[ "$RESOLUTIONLEVEL" =~ ^[0-9]+$ ]]; then
-        # Use custom numeric resolution
-        RESOLUTION="$RESOLUTIONLEVEL"
-        QUALITY_OPTION="-dDownsampleColorImages=true -dDownsampleGrayImages=true -dDownsampleMonoImages=true \
-                        -dColorImageResolution=$RESOLUTION -dGrayImageResolution=$RESOLUTION -dMonoImageResolution=$RESOLUTION"
-        echo "Using custom resolution: $RESOLUTION DPI"
+    SETTING="$2"
+    if [[ "$SETTING" == "screen" || "$SETTING" == "ebook" || "$SETTING" == "printer" ]]; then
+        QUALITY_OPTION="-dPDFSETTINGS=/$SETTING"
+        vprint "Using predefined quality level: $SETTING"
+    elif [[ "$SETTING" =~ ^[0-9]+$ ]]; then
+        RESOLUTION="$SETTING"
+        QUALITY_OPTION="-dDownsampleColorImages=true -dColorImageDownsampleType=/Average -dColorImageResolution=$RESOLUTION \
+                        -dDownsampleGrayImages=true -dGrayImageDownsampleType=/Average -dGrayImageResolution=$RESOLUTION \
+                        -dDownsampleMonoImages=true -dMonoImageDownsampleType=/Subsample -dMonoImageResolution=$RESOLUTION"
+        vprint "Using custom resolution: $RESOLUTION DPI"
     else
-        echo "Error: Invalid quality level or resolution provided."
-        echo "Valid options: screen, ebook, printer, or a numeric resolution (e.g., 100, 200, 300)."
+        echo "Error: Second argument must be one of: screen, ebook, printer, or a numeric resolution."
         exit 1
     fi
 else
-    echo "No resolution specified. Using default: ebook"
+    vprint "No resolution specified. Using default: ebook"
 fi
 
-echo "Reducing size of $INFILE, outputting as $OUTFILE"
+vprint "Input file: $INFILE"
+vprint "Output will be saved to: $OUTFILE"
+$FORCE_RASTER && vprint "⚠️  Force rasterization enabled — pages will be rendered as low-res images."
 
-# Run Ghostscript with appropriate settings
-gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 $QUALITY_OPTION \
-    -dNOPAUSE -dQUIET -dBATCH -sOutputFile="$OUTFILE" "$INFILE"
+# Get original file size in KB (with commas, no decimals)
+original_size_kb=$(du -k "$INFILE" | cut -f1 | awk '{printf "%'\''d", $1}')
 
-# Check if the output file was created successfully
-if [ -f "$OUTFILE" ]; then
-    echo "PDF size reduced successfully! Output saved as: $OUTFILE"
+# Run Ghostscript
+if [ "$FORCE_RASTER" = true ]; then
+    gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 \
+        -r$RESOLUTION \
+        -dFILTERVECTOR=true \
+        -dDetectDuplicateImages=true \
+        -dColorImageDownsampleType=/Average -dColorImageResolution=$RESOLUTION \
+        -dGrayImageDownsampleType=/Average -dGrayImageResolution=$RESOLUTION \
+        -dMonoImageDownsampleType=/Subsample -dMonoImageResolution=$RESOLUTION \
+        -dDownsampleColorImages=true -dDownsampleGrayImages=true -dDownsampleMonoImages=true \
+        -dNOPAUSE -dQUIET -dBATCH \
+        -sOutputFile="$OUTFILE" "$INFILE"
 else
-    echo "Error: Failed to create output file."
+    gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 \
+        $QUALITY_OPTION \
+        -dNOPAUSE -dQUIET -dBATCH \
+        -sOutputFile="$OUTFILE" "$INFILE"
+fi
+
+# Check success
+if [ -f "$OUTFILE" ]; then
+    reduced_size_kb=$(du -k "$OUTFILE" | cut -f1 | awk '{printf "%'\''d", $1}')
+    vprint "✅ PDF compression complete!"
+    vprint "📄 Original size: $original_size_kb KB"
+    vprint "📉 Reduced size : $reduced_size_kb KB"
+    vprint "📁 Output saved as: $OUTFILE"
+else
+    echo "❌ Failed to create output file."
     exit 1
 fi
