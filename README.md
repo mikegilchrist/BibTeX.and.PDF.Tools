@@ -1,84 +1,182 @@
-# BibTeX.Tools
-My tools for creating custom bibtex entries, moving and renaming downloaded files to a standard name, placing them in the directory '~/References', and making symbolic (soft) links to files in current (or other) directory.
+# BibTeX.and.PDF.Tools
 
-In addition there are multiple toosl for converting PDFs into more compact forms with multiple original pages per compact page.
-This code relies on the program `pdfxup` and is not documented further.
+Personal toolchain for managing academic references: converting bibliography
+files (RIS, BibTeX, NBIB, EndNote) into standardized BibTeX entries with
+custom citation keys, generating descriptive PDF filenames, moving PDFs to
+a central `~/References/` directory, and creating symbolic links in project
+directories.
+
+Also includes tools for converting PDFs into multi-page layouts (via
+`pdfxup`), reducing PDF size, adding page numbers, and bundling TeX files.
 
 
 # Installation
 
-- Download repo into a folder such as `~/Repositories`.
-- Either
-  - Add repo folder to your path ($PATH)
-  - Create links to the repos executables in a folder in your current path, such as `~/bin/`.
-    For example, to create links from within the ~/bin folder to the repository folder `~/Repositories/BiBTeX.and.PDF.Tools` use the following command.
-    - > [~/bin] $ find -L ~/Repositories/BiBTeX.and.PDF.Tools/*  -type f -executable -exec ln -s {} . \; -print
-- Create symbolic link in your home directory to the `isi2bibtexrc` file
-  - > [~/] $ ln -s  ~/Repositories/BiBTeX.and.PDF.Tools/isi2bibtexrc .isi2bibtexrc
-  Note the inclusino of the leading `.` in the name of the created link.
-  
+- Clone this repo into a folder such as `~/Repositories/`.
+- Add the repo folder to your `$PATH`, or create symlinks to executables
+  in a folder already in your path (e.g., `~/bin/`):
+
+      [~/bin] $ find -L ~/Repositories/BiBTeX.and.PDF.Tools/* \
+                  -type f -executable -exec ln -s {} . \; -print
+
+- Install Python dependencies:
+
+      pip install rispy bibtexparser
+
+- (Legacy only) Create a symlink for the isi2bibtex config file:
+
+      [~/] $ ln -s ~/Repositories/BiBTeX.and.PDF.Tools/isi2bibtexrc .isi2bibtexrc
+
 
 # Requirements
 
-Code uses and requires the following folders to exist in your home directory
+## Directories
 
-- `~/BiBTeX`
-- `~/BiBTeX/Bkups`
-- `~/References`
- 
-Code assumes downloaded PDF and .RIS files are in `/tmp`
+The following directories must exist in your home directory:
+
+- `~/BiBTeX/`
+- `~/BiBTeX/Bkups/`
+- `~/References/`
+
+Downloaded PDFs and bibliography files are expected in `/tmp/` (configurable
+with `--dir`).
+
+## Software
+
+- Python 3.9+
+- [bibutils](https://sourceforge.net/p/bibutils/home/Bibutils/) --
+  for NBIB, EndNote, and fallback RIS/BibTeX conversion
+- `pdfxup` -- for PDF layout tools (optional)
+- `ghostscript` -- for PDF size reduction (optional)
+
+
+# Supported Input Formats
+
+| Extension | Format | Parser |
+|-----------|--------|--------|
+| `.ris` | RIS (Research Information Systems) | rispy (Python) or bibutils fallback |
+| `.bib` | BibTeX | bibtexparser (Python) or built-in regex parser |
+| `.nbib` | NBIB (PubMed/MEDLINE native) | bibutils (nbib2xml) |
+| `.end` | EndNote plain text | bibutils (end2xml) |
+| `.endx` | EndNote XML | bibutils (endx2xml) |
+| `.xml` | MODS XML | bibutils (xml2bib) -- explicit file mode only |
+
 
 # Pipeline (Usage)
 
-## Automated (Recommended)
+## Primary Tool: update.bib.py
 
-Assuming you keep your references in the folder `~/References` and have your pdfs and .ris files saved in `/tmp/` the following steps should work.
+### Batch mode (default)
 
-1. Download separate pdfs and .ris files for each reference
-2. In folder you want to create the links run
-   > $ update.bib.sh <N>
-   Where `<N>` is the number of references you want to process
-3. Respond to prompts
+Process the N newest bibliography files from `/tmp/`:
+
+    $ update.bib.py N
+
+Where `N` is the number of files to process. This finds `.ris`, `.bib`,
+`.nbib`, or `.end` files in `/tmp/`, converts them to BibTeX with
+standardized keys and filenames, and prepends entries to
+`~/BiBTeX/bibliography.full.bib`.
+
+### Paired mode
+
+Process a single bibliography file and associate it with a downloaded PDF:
+
+    $ update.bib.py paper.ris paper.pdf
+
+This converts the bibliography entry, generates the standardized filename,
+moves the PDF to `~/References/`, and creates a symlink in the current
+directory.
+
+### File-list mode
+
+Process one or more named bibliography files:
+
+    $ update.bib.py ref1.ris ref2.bib ref3.nbib
+
+### Options
+
+    -n, --dry-run       Show what would be done without making changes
+    -v, --verbose       Show detailed output
+    -d, --dir DIR       Staging directory for batch mode (default: /tmp)
+    -f, --format FMT    Force input format instead of auto-detecting
+    --no-move           Skip PDF move/link step
+    --no-prepend        Skip prepending to master bibliography
+    --bib FILE          Master bibliography file
+    --refs DIR          References directory (default: ~/References)
 
 
-## Manual (Not Recommended)
+## Naming Conventions
 
-1. Place references in ISI format in /tmp/savedrecs.txt file
-    a. Download references from Web of Science in ISI format
-    b. Alternatively, convert references to ISI format using tools from the bibutils suite  (e.g. ris2xml piped to xml2isi) or personal scripts that utilize these tools, e.g. ris2isi.
-1. (OPTIONAL) Download PDFs of the files described in savedrecs.txt and place them in /tmp/.  with the timestamps corresponding to the time they were downloaded.
-2. Run prepend.bib.pl which runs
-    - isi2bibtex on /tmp/savedrecs.txt, creating /tmp/tmp.bib
-    - Asks if you wish to append /tmp/tmp.bib to ~/BiBTeX/bibliography.full.bib (and creates a backup of bibliography.full.bib)
-    - Renames savedrecs.txt as savedrecs.txt.old
-    - Asks if you wish to run bib.move.and.link.sh which will 
-        a. use the information in /tmp/tmp.bib to generate appropriate filenames for the pdfs
-        b. provide an indexed list of the filenames for the pdfs.
-        c. print some information from the pdf to the std. output, and ask the user to assign the pdf file to one of the references.
-        d. Move the pdf to `~/Reference` and make a symbolic link to the directory the script is being run from.
+### Citation keys
 
+| Authors | Key format | Example |
+|---------|-----------|---------|
+| 1 | AuthorYear | Smith2012 |
+| 2 | Author1AndAuthor2Year | SmithAndJones2012 |
+| 3+ | Author1EtAlYear | SmithEtAl2012 |
 
-## Issues
-- Automatic download of pdfs listed in tmp.bib using PMID works inconsistently.
-- RIS doesn't use PMIDs
-- Need to automate means of creating savedrecs.txt such as bulk conversion of individual .ris files (or other formats).
-- Need to be able to edit proposed file names since scripts are imperfect.
+### PDF filenames
+
+| Authors | Filename format |
+|---------|----------------|
+| 1 | `Author_Year_title.words_Journal.Name.pdf` |
+| 2 | `Author1.and.Author2_Year_title.words_Journal.Name.pdf` |
+| 3+ | `Author1.et.al_Year_title.words_Journal.Name.pdf` |
 
 
-# File Descriptions
-## isi2bibtex
-Takes a 'plain text' (really an ISI formated file) file of references exported from from Web of Science. 
-Exported file is saved in /tmp/savedrecs.txt. 
-Script creates a .bib version of entries where the bibkey is customized to be either
-    - AuthorYear: Single author paper
-    - Author1AndAuthor2Year: Two author paper
-    - Author1EtAlYear: 2+ author paper
-Script also populates the `file = {}' entry as
-    - Author_Year_article.title_Journal.Title.pdf
-    - Author1.and.Author2_Year_article.title_Journal.Title.pdf
-    - Author1.et.al_Year_article.title_Journal.Title.pdf
-Script relies on .isi2bibtexrc file in home directory for some of this customization.
+## Legacy Pipeline
 
-# Issues
----2xml seems to loose PMID info
-isi uses PM for pubmed ID
+The original pipeline (still functional but deprecated) uses `update.bib.sh`,
+`isi2bibtex` (Perl), and `prepend.bib.pl` (Bash). See `CLAUDE.md` for
+details on all legacy scripts.
+
+
+# Script Inventory
+
+## Reference management
+| Script | Purpose |
+|--------|---------|
+| update.bib.py | Main tool: multi-format bibliography conversion |
+| update.bib.sh | Legacy batch RIS converter (deprecated) |
+| isi2bibtex | Legacy ISI -> BibTeX converter (Perl) |
+| prepend.bib.pl | Legacy interactive orchestrator |
+| bib.move.and.link.sh | Interactive PDF-to-entry matching |
+
+## Format conversion
+| Script | Purpose |
+|--------|---------|
+| bib2ris | BibTeX -> RIS via bibutils |
+| bib2isi | BibTeX -> ISI via bibutils |
+| nbib2ris | NBIB -> RIS via bibutils |
+
+## PDF downloading
+| Script | Purpose |
+|--------|---------|
+| download.pdfs.from.doi.sh | Download via Unpaywall API or publisher scraping |
+| extract.doi.from.bib.sh | Extract DOIs from .bib to dois.txt |
+| get.pdf.from.bib.doi.sh | Batch download using DOIs from .bib |
+| get.pdf.from.bib.pmid.sh | Batch download using PMIDs |
+| get.bib.from.pdf.sh | Extract BibTeX from PDF metadata via DOI |
+
+## File management
+| Script | Purpose |
+|--------|---------|
+| move.and.link.sh | Move file to directory, create symlink |
+| rename.move.and.link.sh | Rename, move, and link a PDF |
+| copy.target.and.redirect.links.sh | Relocate symlink targets |
+
+## PDF tools
+| Script | Purpose |
+|--------|---------|
+| make.2x1.and.link.pdf.sh | Multi-page layouts (2x1, 2x2, 2x3, etc.) |
+| reduce.pdf.size.sh | Reduce PDF resolution via ghostscript |
+| add.page.numbers.to.pdf.sh | Add page numbers to PDF |
+| calc.pdf.page.sizes.sh | Report per-page dimensions |
+| bundle_tex_figures.sh | Bundle .tex + figures for sharing |
+
+
+# Known Issues
+
+- `*2xml` tools from bibutils may lose PMID information during conversion.
+- ISI format uses `PM` for PubMed ID; RIS does not include PMIDs.
+- Automatic PDF download via PMID is inconsistent.
