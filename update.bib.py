@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # ============================================================================
 # Script:       update.bib.py
-# Version:      1.2.0
+# Version:      1.4.0
 # Date:         2026-02-23
 # Purpose:      Convert bibliography files to BibTeX, generate standardized
 #               citation keys and PDF filenames, update master bibliography.
@@ -151,6 +151,72 @@ FILENAME_JOURNAL_ABBREVS = {
     "Proceedings of the Royal Society B: Biological Sciences": "PRSB",
 }
 
+# Supplementary journal abbreviations for common journals not in JabRef CSVs.
+# These are loaded as a fallback after the CSV files.
+SUPPLEMENTARY_JOURNAL_ABBREVS = {
+    "Evolution": "Evolution",
+    "Proceedings of the National Academy of Sciences": "Proc. Natl. Acad. Sci. U. S. A.",
+    "Nature Communications": "Nat. Commun.",
+    "Nature Reviews Genetics": "Nat. Rev. Genet.",
+    "Nature Reviews Cancer": "Nat. Rev. Cancer",
+    "Nature Reviews Microbiology": "Nat. Rev. Microbiol.",
+    "Nature Reviews Clinical Oncology": "Nat. Rev. Clin. Oncol.",
+    "Nature Reviews Disease Primers": "Nat. Rev. Dis. Primers",
+    "Nature Reviews Urology": "Nat. Rev. Urol.",
+    "Nature Reviews Molecular Cell Biology": "Nat. Rev. Mol. Cell Biol.",
+    "eLife": "eLife",
+    "Scientific Reports": "Sci. Rep.",
+    "Cell Reports": "Cell Rep.",
+    "Biological Reviews": "Biol. Rev.",
+    "Evolutionary Applications": "Evol. Appl.",
+    "Ecology and Evolution": "Ecol. Evol.",
+    "Evolution: Education and Outreach": "Evol. Educ. Outreach",
+    "Evolutionary Ecology Research": "Evol. Ecol. Res.",
+    "Open Biology": "Open Biol.",
+    "Royal Society Open Science": "R. Soc. Open Sci.",
+    "Philosophical Transactions of the Royal Society B: Biological Sciences": "Philos. Trans. R. Soc. Lond. B Biol. Sci.",
+    "Proceedings of the Royal Society of London B, Biological Sciences": "Proc. R. Soc. Lond. B Biol. Sci.",
+    "Proceedings of the Royal Society B-Biological Sciences": "Proc. R. Soc. B",
+    "Signal Transduction and Targeted Therapy": "Signal Transduct. Target. Ther.",
+    "Trends in Endocrinology and Metabolism": "Trends Endocrinol. Metab.",
+    "Tumor Biology": "Tumour Biol.",
+    "Cancer Biology and Medicine": "Cancer Biol. Med.",
+    "mBio": "mBio",
+    "Oikos": "Oikos",
+    "Genomics and Informatics": "Genomics Inform.",
+    "Biology and Philosophy": "Biol. Philos.",
+    "Zoological Research": "Zool. Res.",
+    "Pigment Cell and Melanoma Research": "Pigment Cell Melanoma Res.",
+    "Translational Lung Cancer Research": "Transl. Lung Cancer Res.",
+    "Harvard Data Science Review": "Harv. Data Sci. Rev.",
+    "Annual Review of Biomedical Data Science": "Annu. Rev. Biomed. Data Sci.",
+    "Nature Ecology and Evolution": "Nat. Ecol. Evol.",
+    "Evolutionary Ecology": "Evol. Ecol.",
+    "bioRxiv": "bioRxiv",
+    "Methods in Ecology and Evolution": "Methods Ecol. Evol.",
+    "International Journal of Molecular Sciences": "Int. J. Mol. Sci.",
+    "Journal of Statistical Software": "J. Stat. Softw.",
+    "Statistics and Computing": "Stat. Comput.",
+    "Physical Review E": "Phys. Rev. E",
+    "Journal of Research in Science Teaching": "J. Res. Sci. Teach.",
+    "Cell Biology Education": "CBE Life Sci. Educ.",
+    "Proceedings of the Royal Society of London. Series B. Biological Sciences": "Proc. R. Soc. Lond. B Biol. Sci.",
+    "Proceedings of the Royal Society of London Series B-Biological Sciences": "Proc. R. Soc. Lond. B Biol. Sci.",
+    "Journal of Computational and Graphical Statistics": "J. Comput. Graph. Stat.",
+    "G3 Genes|Genomes|Genetics": "G3 (Bethesda)",
+    "G3: Genes, Genomes, Genetics": "G3 (Bethesda)",
+    "Lobachevskii Journal of Mathematics": "Lobachevskii J. Math.",
+    "Genome Biology and Evolution": "Genome Biol. Evol.",
+    "Cold Spring Harbor Perspectives in Biology": "Cold Spring Harb. Perspect. Biol.",
+    "CBE-Life Sciences Education": "CBE Life Sci. Educ.",
+    "Nature Reviews Immunology": "Nat. Rev. Immunol.",
+    "Journal of the Royal Society Interface": "J. R. Soc. Interface",
+    "Population Ecology": "Popul. Ecol.",
+    "New Scientist": "New Sci.",
+    "SIAM Review": "SIAM Rev.",
+    "RNA": "RNA",
+}
+
 # Default paths
 DEFAULT_BIB = Path.home() / "BiBTeX" / "bibliography.full.bib"
 DEFAULT_REFS = Path.home() / "References"
@@ -210,16 +276,33 @@ class JournalAbbreviations:
                 print(f"WARNING: failed to load {csv_path}: {e}",
                       file=sys.stderr)
 
+        # Load supplementary abbreviations (only if not already in CSVs)
+        for full_name, abbrev in SUPPLEMENTARY_JOURNAL_ABBREVS.items():
+            key_full = self._normalize(full_name)
+            key_abbrev = self._normalize(abbrev)
+            if key_full not in self._by_full:
+                self._by_full[key_full] = (full_name, abbrev)
+            if key_abbrev not in self._by_abbrev:
+                self._by_abbrev[key_abbrev] = (full_name, abbrev)
+
         self._loaded = True
 
     @staticmethod
     def _normalize(name):
         """Normalize a journal name for case-insensitive matching.
 
-        Strips leading articles, normalizes whitespace, lowercases,
-        and handles & vs "and" variations.
+        Strips BibTeX braces, LaTeX escapes, leading articles,
+        normalizes whitespace, lowercases, and handles & vs "and"
+        variations.
         """
-        s = name.lower().strip()
+        s = name.strip()
+        # Strip BibTeX braces (e.g., {BMC} -> BMC, {AIDS} -> AIDS)
+        s = s.replace("{", "").replace("}", "")
+        # Convert LaTeX \& to & before normalizing
+        s = s.replace("\\&", "&")
+        # Strip trailing comma (sometimes present in bib fields)
+        s = s.rstrip(",").strip()
+        s = s.lower()
         # Normalize "&" to "and"
         s = s.replace(" & ", " and ")
         # Remove leading "the "
@@ -232,12 +315,20 @@ class JournalAbbreviations:
     def get_abbreviation(self, full_name):
         """Look up the abbreviation for a full journal name.
 
+        Also checks abbreviation table as fallback, so if the input is
+        already an abbreviation, returns the canonical abbreviation.
         Returns the abbreviation string, or None if not found.
         """
         self.load()
         key = self._normalize(full_name)
         entry = self._by_full.get(key)
-        return entry[1] if entry else None
+        if entry:
+            return entry[1]
+        # Fallback: input might already be an abbreviation
+        entry = self._by_abbrev.get(key)
+        if entry:
+            return entry[1]
+        return None
 
     def get_full_name(self, abbrev):
         """Look up the full name for a journal abbreviation.
@@ -1111,6 +1202,334 @@ examples:
                         help=f"References directory (default: {DEFAULT_REFS})")
 
     opts = parser.parse_args(args)
+
+    if not opts.positional:
+        parser.print_help()
+        return 1
+
+    # Detect mode
+    mode, details = detect_mode(opts.positional)
+
+    if opts.verbose:
+        print(f"Mode: {mode}")
+        libs = []
+        if HAS_RISPY:
+            libs.append("rispy")
+        if HAS_BIBTEXPARSER:
+            libs.append("bibtexparser")
+        if libs:
+            print(f"Python libraries: {', '.join(libs)}")
+        else:
+            print("Python libraries: none (using bibutils + built-in parser)")
+
+    # Gather files to process
+    if mode == "batch":
+        n = details
+        bib_files = find_bib_files(opts.dir, n, verbose=opts.verbose)
+        if not bib_files:
+            return 1
+        pdf_path = None
+    elif mode == "paired":
+        bib_file, pdf_path = details
+        bib_files = [Path(bib_file)]
+        if not Path(pdf_path).exists():
+            print(f"ERROR: PDF not found: {pdf_path}", file=sys.stderr)
+            return 1
+    else:  # files mode
+        bib_files = [Path(f) for f in details]
+        pdf_path = None
+
+    # Determine formats needed and check dependencies
+    formats_needed = set()
+    for f in bib_files:
+        ext = opts.format or f.suffix.lower().lstrip(".")
+        formats_needed.add(ext)
+
+    if not check_dependencies(formats_needed, verbose=opts.verbose):
+        return 1
+
+    # Process each file
+    all_formatted = []
+    for bib_file in bib_files:
+        if not Path(bib_file).exists():
+            print(f"ERROR: file not found: {bib_file}", file=sys.stderr)
+            return 1
+
+        if opts.verbose:
+            print(f"\nProcessing: {bib_file}")
+
+        entries = convert_file_to_entries(bib_file, fmt=opts.format)
+        if not entries:
+            print(f"WARNING: no entries parsed from {bib_file}",
+                  file=sys.stderr)
+            continue
+
+        for i, entry in enumerate(entries):
+            if opts.verbose:
+                print(f"\nEntry {i + 1}/{len(entries)}:")
+
+            # In paired mode, only associate PDF with first entry
+            entry_pdf = pdf_path if (mode == "paired" and i == 0) else None
+
+            formatted, key, filename = process_entry(
+                entry, opts.refs, pdf_path=entry_pdf,
+                dry_run=opts.dry_run, verbose=opts.verbose,
+                no_move=opts.no_move,
+            )
+            all_formatted.append(formatted)
+
+            print(f"  {key}: {filename}")
+
+    if not all_formatted:
+        print("No entries to process.", file=sys.stderr)
+        return 1
+
+    # Combine all formatted entries
+    combined = "\n\n".join(all_formatted)
+
+    if opts.dry_run:
+        print(f"\n--- Generated BibTeX ({len(all_formatted)} entries) ---")
+        print(combined)
+        print("---")
+
+    # Prepend to master bibliography
+    if not opts.no_prepend:
+        backup_and_prepend(combined, opts.bib,
+                           dry_run=opts.dry_run, verbose=opts.verbose)
+    elif opts.verbose:
+        print("Skipping prepend (--no-prepend)")
+
+    # In batch mode, offer to process PDFs
+    if mode == "batch" and not opts.no_move and not opts.dry_run:
+        print(f"\n{len(all_formatted)} entries processed.")
+        print("Use bib.move.and.link.sh to associate PDFs with entries,")
+        print("or re-run in paired mode: update.bib.py BIBFILE PDFFILE")
+
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# In-place journal-iso update for existing .bib files
+# ---------------------------------------------------------------------------
+
+def update_journal_iso(bib_path, dry_run=False, verbose=False,
+                       overwrite=False):
+    """Scan a .bib file and insert/update journal-iso fields.
+
+    For each @article entry:
+    - If journal-iso is empty ({}) and a journal name is present,
+      look up the abbreviation and fill it in.
+    - If journal-iso is missing entirely, insert the field after the
+      journal line.
+    - If journal-iso is already populated, skip it unless overwrite=True.
+
+    Operates line-by-line to preserve formatting, comments, and other
+    content exactly as-is. Only modifies journal-iso lines/insertions.
+
+    Returns (total_entries, updated_count, skipped_count, not_found_count).
+    """
+    bib_path = Path(bib_path)
+    if not bib_path.exists():
+        print(f"ERROR: file not found: {bib_path}", file=sys.stderr)
+        return (0, 0, 0, 0)
+
+    with open(bib_path, "r", encoding="utf-8", errors="replace") as f:
+        lines = f.readlines()
+
+    # Patterns for matching fields
+    journal_pat = re.compile(
+        r'^(\s*journal\s*=\s*\{)(.*?)(\}\s*,?\s*)$', re.IGNORECASE
+    )
+    journal_iso_pat = re.compile(
+        r'^(\s*journal-iso\s*=\s*\{)(.*?)(\}\s*,?\s*)$', re.IGNORECASE
+    )
+    entry_pat = re.compile(r'^@\w+\{', re.IGNORECASE)
+
+    new_lines = []
+    total_entries = 0
+    updated = 0
+    skipped = 0
+    not_found = 0
+
+    current_journal = None
+    current_journal_line_idx = None  # index in new_lines of the journal line
+    pending_journal = None  # journal name waiting for journal-iso line
+    saw_journal_iso = False
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # Detect new entry -- flush any pending journal without journal-iso
+        if entry_pat.match(line):
+            if pending_journal and not saw_journal_iso:
+                # Previous entry had journal but no journal-iso field.
+                # Insert one after the journal line.
+                abbrev = _journal_db.get_abbreviation(pending_journal)
+                if abbrev:
+                    indent = "\t"
+                    # Match the formatting of the journal line
+                    iso_line = f"{indent}journal-iso\t= {{{abbrev}}},\n"
+                    insert_pos = current_journal_line_idx + 1
+                    new_lines.insert(insert_pos, iso_line)
+                    updated += 1
+                    if verbose:
+                        print(f"  INSERT: {pending_journal} -> {abbrev}")
+                else:
+                    not_found += 1
+                    if verbose:
+                        print(f"  NOT FOUND: {pending_journal}")
+
+            total_entries += 1
+            current_journal = None
+            pending_journal = None
+            saw_journal_iso = False
+            current_journal_line_idx = None
+
+        # Match journal = {...}
+        m_journal = journal_pat.match(line)
+        if m_journal:
+            current_journal = m_journal.group(2).strip()
+            pending_journal = current_journal
+            current_journal_line_idx = len(new_lines)  # will be this index
+            saw_journal_iso = False
+
+        # Match journal-iso = {...}
+        m_iso = journal_iso_pat.match(line)
+        if m_iso:
+            saw_journal_iso = True
+            existing_value = m_iso.group(2).strip()
+
+            if existing_value and not overwrite:
+                # Already has a value, skip
+                skipped += 1
+                pending_journal = None
+            elif current_journal:
+                abbrev = _journal_db.get_abbreviation(current_journal)
+                if abbrev:
+                    # Replace the line with the looked-up abbreviation
+                    prefix = m_iso.group(1)
+                    suffix = m_iso.group(3)
+                    line = f"{prefix}{abbrev}{suffix}\n"
+                    updated += 1
+                    if verbose:
+                        print(f"  UPDATE: {current_journal} -> {abbrev}")
+                else:
+                    not_found += 1
+                    if verbose:
+                        print(f"  NOT FOUND: {current_journal}")
+                pending_journal = None
+            else:
+                pending_journal = None
+
+        new_lines.append(line)
+        i += 1
+
+    # Handle last entry if it had a journal but no journal-iso
+    if pending_journal and not saw_journal_iso:
+        abbrev = _journal_db.get_abbreviation(pending_journal)
+        if abbrev:
+            indent = "\t"
+            iso_line = f"{indent}journal-iso\t= {{{abbrev}}},\n"
+            insert_pos = current_journal_line_idx + 1
+            new_lines.insert(insert_pos, iso_line)
+            updated += 1
+            if verbose:
+                print(f"  INSERT: {pending_journal} -> {abbrev}")
+        else:
+            not_found += 1
+
+    print(f"Entries: {total_entries}, "
+          f"Updated: {updated}, "
+          f"Skipped (already set): {skipped}, "
+          f"Not found: {not_found}")
+
+    if dry_run:
+        print("[dry-run] No changes written.")
+        return (total_entries, updated, skipped, not_found)
+
+    if updated == 0:
+        print("No changes needed.")
+        return (total_entries, updated, skipped, not_found)
+
+    # Backup and write
+    bkups_dir = bib_path.parent / "Bkups"
+    bkups_dir.mkdir(parents=True, exist_ok=True)
+    bkup_path = bkups_dir / bib_path.name
+    bkup2_path = bkups_dir / bib_path.name.replace(".bib", ".bkup")
+    if bkup_path.exists():
+        shutil.copy2(str(bkup_path), str(bkup2_path))
+    shutil.copy2(str(bib_path), str(bkup_path))
+
+    with open(bib_path, "w", encoding="utf-8") as f:
+        f.writelines(new_lines)
+
+    print(f"Written to {bib_path} (backup in {bkups_dir})")
+    return (total_entries, updated, skipped, not_found)
+
+
+def run(args):
+    """Main execution logic."""
+    # Parse arguments
+    parser = argparse.ArgumentParser(
+        prog="update.bib.py",
+        description="Convert bibliography files to BibTeX with standardized "
+                    "citation keys and PDF filenames.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\
+modes:
+  update.bib.py N                  Batch: process N newest files from /tmp
+  update.bib.py BIBFILE PDFFILE    Paired: one bib file + one PDF
+  update.bib.py FILE [FILE...]     Multi-file: process named bib files
+  update.bib.py --update-journals  Fill in journal-iso fields in master bib
+
+examples:
+  update.bib.py 3                  Process 3 newest .ris/.bib files from /tmp
+  update.bib.py paper.ris paper.pdf   Convert RIS, rename+move PDF
+  update.bib.py --dry-run ref1.bib ref2.ris   Preview without changes
+  update.bib.py --update-journals --dry-run    Preview journal-iso updates
+""",
+    )
+    parser.add_argument("positional", nargs="*",
+                        help="N (batch count) or FILE [FILE...] or "
+                        "BIBFILE PDFFILE")
+    parser.add_argument("-n", "--dry-run", action="store_true",
+                        help="Show what would be done without making changes")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="Show detailed output")
+    parser.add_argument("-d", "--dir", default=str(DEFAULT_STAGING),
+                        help=f"Staging directory for batch mode "
+                        f"(default: {DEFAULT_STAGING})")
+    parser.add_argument("-f", "--format",
+                        choices=list(BIBUTILS_CONVERTERS.keys()),
+                        help="Force input format instead of auto-detecting")
+    parser.add_argument("--no-move", action="store_true",
+                        help="Skip PDF move/link step")
+    parser.add_argument("--no-prepend", action="store_true",
+                        help="Skip prepending to master bibliography")
+    parser.add_argument("--bib", default=str(DEFAULT_BIB),
+                        help=f"Master bibliography file "
+                        f"(default: {DEFAULT_BIB})")
+    parser.add_argument("--refs", default=str(DEFAULT_REFS),
+                        help=f"References directory (default: {DEFAULT_REFS})")
+    parser.add_argument("--update-journals", action="store_true",
+                        help="Scan a .bib file and fill in empty journal-iso "
+                        "fields from the abbreviation database")
+    parser.add_argument("--overwrite-iso", action="store_true",
+                        help="With --update-journals, overwrite existing "
+                        "journal-iso values (default: skip non-empty)")
+
+    opts = parser.parse_args(args)
+
+    # --update-journals mode
+    if opts.update_journals:
+        target = opts.positional[0] if opts.positional else opts.bib
+        print(f"Updating journal-iso in: {target}")
+        update_journal_iso(
+            target, dry_run=opts.dry_run, verbose=opts.verbose,
+            overwrite=opts.overwrite_iso,
+        )
+        return 0
 
     if not opts.positional:
         parser.print_help()
