@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # ============================================================================
 # Script:       update.bib.py
-# Version:      1.1.0
+# Version:      1.2.0
 # Date:         2026-02-23
 # Purpose:      Convert bibliography files to BibTeX, generate standardized
 #               citation keys and PDF filenames, update master bibliography.
@@ -140,8 +140,10 @@ _PROTECTED_PATTERN = re.compile(
                       sorted(PROTECTED_WORDS, key=len, reverse=True)) + r')\b'
 )
 
-# Long journal name abbreviations
-JOURNAL_ABBREVIATIONS = {
+# Short list of very long journal names that should use custom abbreviations
+# in filenames (shorter than the ISO 4 abbreviation). These override the
+# journal abbreviation database when generating filenames only.
+FILENAME_JOURNAL_ABBREVS = {
     "Proceedings Of The National Academy Of Sciences Of The United States Of America": "PNAS",
     "Proceedings of the National Academy of Sciences of the United States of America": "PNAS",
     "Proceedings Of The Royal Society B-Biological Sciences": "PRSB",
@@ -153,6 +155,124 @@ JOURNAL_ABBREVIATIONS = {
 DEFAULT_BIB = Path.home() / "BiBTeX" / "bibliography.full.bib"
 DEFAULT_REFS = Path.home() / "References"
 DEFAULT_STAGING = Path("/tmp")
+
+# Journal abbreviation data directory (JabRef CSV files)
+_JOURNAL_DATA_DIR = Path(__file__).parent / "data" / "journal_abbreviations"
+
+
+# ---------------------------------------------------------------------------
+# Journal abbreviation database
+# ---------------------------------------------------------------------------
+
+class JournalAbbreviations:
+    """Bidirectional lookup between full journal names and abbreviations.
+
+    Loads JabRef-format CSV files from data/journal_abbreviations/.
+    Supports lookup in both directions (full -> abbrev, abbrev -> full).
+    Case-insensitive matching with normalization of common variations.
+    """
+
+    def __init__(self):
+        # full_name (lowercase) -> (full_name_original, iso_abbrev)
+        self._by_full = {}
+        # abbrev (lowercase) -> (full_name_original, iso_abbrev)
+        self._by_abbrev = {}
+        self._loaded = False
+
+    def load(self, data_dir=None):
+        """Load all CSV files from the data directory."""
+        if self._loaded:
+            return
+        data_dir = Path(data_dir) if data_dir else _JOURNAL_DATA_DIR
+        if not data_dir.is_dir():
+            return
+
+        import csv
+        for csv_path in sorted(data_dir.glob("*.csv")):
+            try:
+                with open(csv_path, "r", encoding="utf-8",
+                          errors="replace") as f:
+                    reader = csv.reader(f)
+                    for row in reader:
+                        if len(row) < 2:
+                            continue
+                        full_name = row[0].strip().strip('"')
+                        abbrev = row[1].strip().strip('"')
+                        if not full_name or not abbrev:
+                            continue
+                        key_full = self._normalize(full_name)
+                        key_abbrev = self._normalize(abbrev)
+                        if key_full not in self._by_full:
+                            self._by_full[key_full] = (full_name, abbrev)
+                        if key_abbrev not in self._by_abbrev:
+                            self._by_abbrev[key_abbrev] = (full_name, abbrev)
+            except Exception as e:
+                print(f"WARNING: failed to load {csv_path}: {e}",
+                      file=sys.stderr)
+
+        self._loaded = True
+
+    @staticmethod
+    def _normalize(name):
+        """Normalize a journal name for case-insensitive matching.
+
+        Strips leading articles, normalizes whitespace, lowercases,
+        and handles & vs "and" variations.
+        """
+        s = name.lower().strip()
+        # Normalize "&" to "and"
+        s = s.replace(" & ", " and ")
+        # Remove leading "the "
+        if s.startswith("the "):
+            s = s[4:]
+        # Collapse whitespace
+        s = re.sub(r'\s+', ' ', s)
+        return s
+
+    def get_abbreviation(self, full_name):
+        """Look up the abbreviation for a full journal name.
+
+        Returns the abbreviation string, or None if not found.
+        """
+        self.load()
+        key = self._normalize(full_name)
+        entry = self._by_full.get(key)
+        return entry[1] if entry else None
+
+    def get_full_name(self, abbrev):
+        """Look up the full name for a journal abbreviation.
+
+        Returns the full name string, or None if not found.
+        """
+        self.load()
+        key = self._normalize(abbrev)
+        entry = self._by_abbrev.get(key)
+        return entry[0] if entry else None
+
+    def lookup(self, name):
+        """Look up a journal name in either direction.
+
+        Returns (full_name, abbreviation) tuple, or (name, None) if not found.
+        """
+        self.load()
+        key = self._normalize(name)
+        # Try as full name first
+        entry = self._by_full.get(key)
+        if entry:
+            return entry
+        # Try as abbreviation
+        entry = self._by_abbrev.get(key)
+        if entry:
+            return entry
+        return (name, None)
+
+    def __len__(self):
+        self.load()
+        return len(self._by_full)
+
+
+# Singleton instance -- loaded lazily on first use
+_journal_db = JournalAbbreviations()
 
 
 # ---------------------------------------------------------------------------
@@ -556,11 +676,10 @@ def _clean_journal_for_filename(journal):
     """Clean a journal name for use in a filename."""
     if not journal:
         return ""
-    # Apply abbreviations for long journal names
-    for full_name, abbrev in JOURNAL_ABBREVIATIONS.items():
+    # Check custom short abbreviations first (PNAS, PRSB, etc.)
+    for full_name, abbrev in FILENAME_JOURNAL_ABBREVS.items():
         if journal.lower() == full_name.lower():
-            journal = abbrev
-            break
+            return abbrev
     # Replace & with "and"
     journal = journal.replace("&", "and")
     # Fix PLoS casing
@@ -648,6 +767,20 @@ def format_bibtex_entry(entry, key, filename, refs_dir):
         ("pages", "pages"),
         ("abstract", "abstract"),
     ]
+
+    # Look up journal abbreviation if not already provided
+    journal_name = entry.get("journal", "")
+    journal_iso = entry.get("journal-iso", "")
+    if journal_name and not journal_iso:
+        abbrev = _journal_db.get_abbreviation(journal_name)
+        if abbrev:
+            entry = dict(entry)  # avoid mutating original
+            entry["journal-iso"] = abbrev
+    elif journal_iso and not journal_name:
+        full = _journal_db.get_full_name(journal_iso)
+        if full:
+            entry = dict(entry)
+            entry["journal"] = full
 
     # Compute alignment: field names are padded, values use tab alignment
     for display_name, field_key in field_order:
