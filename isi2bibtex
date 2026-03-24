@@ -1542,6 +1542,7 @@ sub makepdfname {
         # 06/23/16 -- replace some long journal names. 
 	$journal =~ s/Proceedings Of The National Academy Of Sciences Of The United States Of America/PNAS/;
 	$journal =~ s/Proceedings Of The Royal Society B-Biological Sciences/PRSB/;
+	$journal =~ s/Science \(New York, N\.Y\.\)/Science/;
 	$journal =~ s/&/and/;
 	$journal =~ s/.In./.in./;
 	$journal =~ s/^Plos./PLoS./;
