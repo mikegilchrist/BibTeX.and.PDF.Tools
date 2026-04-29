@@ -149,6 +149,31 @@ linelength = 32760
 isotitle = 1       # include ISO journal title
 ```
 
+## Downloading Paywalled PDFs
+
+WebFetch cannot authenticate with journal paywalls. When a PDF URL returns a
+login page or access-denied response, use the browser fallback instead:
+
+```bash
+# On campus (UTK network) -- no proxy needed
+fetch.pdf URL OUTPUT_PATH
+
+# Off campus -- prepend UTK proxy
+fetch.pdf --proxy-prefix "https://utk.idm.oclc.org/login?url=" URL OUTPUT_PATH
+```
+
+`fetch.pdf` (~bin/fetch.pdf -> repo/fetch.pdf.with.browser.py) opens a
+WebKit2GTK window. Navigate to the paper if needed, then click the PDF
+download link. The browser intercepts the download, saves it to OUTPUT_PATH,
+and closes automatically.
+
+Signs that a URL needs the browser fallback:
+- WebFetch returns HTML with words like "login", "access", "subscribe", "sign in"
+- HTTP 401, 403, or redirect to a .../login or .../shibboleth URL
+- Content-Type is text/html when application/pdf was expected
+
+For batch PMID-based downloads, use get.pdf.from.bib.pmid.sh --browser.
+
 ## Future Work
 
 - Auto-download from bibliography: given a .bib with DOIs but no PDFs,

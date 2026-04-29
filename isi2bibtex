@@ -1495,6 +1495,7 @@ sub doi {
 # output doi
     my $fld = $INDENT.'doi   '.$INDENTB.''.$INDENTA;
     #$record{'doi'} = texsafety($record{'doi'});
+    $record{'doi'} =~ s/\s+ER\s*$//;    # strip ER end-of-record marker leaked by xml2isi
     check_field('doi');
     if (length $record{'doi'} > 0 ){ #ensure doi is given
 	$output .= ",\n".pastewrap("{$record{'doi'}}",

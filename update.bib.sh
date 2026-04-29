@@ -1,8 +1,8 @@
 #!/bin/bash
 # ============================================================================
 # Script:       update.bib.sh
-# Version:      2.0.0
-# Date:         2026-03-23
+# Version:      2.1.0
+# Date:         2026-04-28
 # Purpose:      Convert .ris files in /tmp to BibTeX and update bibliography
 #
 # Pipeline: .ris -> ris2xml -> xml2isi -> isi2bibtex -> prepend to bibliography
@@ -155,6 +155,62 @@ else
         fi
     done
     ok "Created $ISIFILE from ${#RISFILES[@]} .ris file(s)"
+
+    # --- Inject PM (PMID) lines lost by xml2isi ---
+    # xml2isi versions <= 7.2 have no mapping for PubMed IDs; patch them in
+    # by matching DI (DOI). Skipped automatically once a fixed bibutils is
+    # installed (probe converts a synthetic RIS record and checks for PM output).
+    if printf 'TY  - JOUR\nPM  - 99999999\nER  -\n' \
+            | ris2xml 2>/dev/null | xml2isi -nb 2>/dev/null \
+            | grep -q '^PM '; then
+        [[ $VERBOSE -eq 1 ]] && ok "bibutils has native PM support -- skipping injection"
+    else
+    python3 - "${RISFILES[@]}" "$ISIFILE" << 'PYEOF'
+import re, sys
+
+ris_files = sys.argv[1:-1]
+isi_file  = sys.argv[-1]
+
+# Build DOI -> PMID map from RIS files
+doi_to_pmid = {}
+for path in ris_files:
+    doi = pmid = None
+    with open(path) as fh:
+        for line in fh:
+            m = re.match(r'^DO\s+-\s+(.+)', line)
+            if m: doi = m.group(1).strip()
+            m = re.match(r'^PM\s+-\s+(.+)', line)
+            if m: pmid = m.group(1).strip()
+    if doi and pmid:
+        doi_to_pmid[doi] = pmid
+
+if not doi_to_pmid:
+    sys.exit(0)
+
+with open(isi_file) as f:
+    lines = f.readlines()
+
+current_doi = None
+out = []
+injected = 0
+for line in lines:
+    stripped = line.rstrip()
+    m = re.match(r'^DI (.+)', stripped)
+    if m:
+        current_doi = m.group(1).strip()
+    if stripped == 'ER' and current_doi in doi_to_pmid:
+        out.append('PM ' + doi_to_pmid[current_doi] + '\n')
+        injected += 1
+        current_doi = None
+    out.append(line)
+
+with open(isi_file, 'w') as f:
+    f.writelines(out)
+
+print(f'  Injected PM field for {injected} of {len(doi_to_pmid)} RIS records with PMIDs')
+PYEOF
+    [[ $VERBOSE -eq 1 ]] && ok "PM injection complete"
+    fi  # end bibutils PM workaround
 fi
 
 # --- Run prepend.bib.pl ---
