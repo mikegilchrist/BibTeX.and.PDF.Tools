@@ -1,9 +1,13 @@
 #!/bin/bash
 # ============================================================================
 # Script:       update.bib.sh
-# Version:      2.2.0
-# Date:         2026-05-01
+# Version:      2.3.0
+# Created:      2020-08-28
+# Revised:      2026-07-12
 # Purpose:      Convert .ris files in /tmp to BibTeX and update bibliography
+#
+# STATUS: DEPRECATED -- superseded by update.bib.py (symlink: update.bib).
+#         Kept only for reference; prompts for confirmation before running.
 #
 # Pipeline: .ris -> ris2xml -> xml2isi -> isi2bibtex -> prepend to bibliography
 #
@@ -97,6 +101,16 @@ if [[ -z "$N" ]]; then
     err "One argument expected: N - the number of .ris files to process."
     echo "Usage: $(basename "$0") [OPTIONS] N"
     exit 1
+fi
+
+# --- Deprecation warning ---
+if [[ $BATCH -eq 0 ]]; then
+    warn "This script has been superseded by update.bib.py (symbolic link at update.bib)."
+    read -r -p "Are you sure you want to proceed? [N/y] " REPLY
+    case "$REPLY" in
+        y|Y|yes|YES) ;;
+        *) echo "Aborted."; exit 0 ;;
+    esac
 fi
 
 # --- Timestamp for unique filenames ---
