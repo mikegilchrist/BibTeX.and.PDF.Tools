@@ -1229,7 +1229,7 @@ def find_staging_candidate(bib_file, staging_dir, claimed, verbose=False):
     return None
 
 
-def offer_generate(pdf_path, dry_run=False, verbose=False):
+def offer_generate(pdf_path, refs_dir, dry_run=False, verbose=False):
     """Interactively offer to run summarize.files on pdf_path."""
     if pdf_path is None:
         return
@@ -1252,6 +1252,8 @@ def offer_generate(pdf_path, dry_run=False, verbose=False):
         extra = ["--no-extract"]
     else:
         return
+
+    extra += ["--out-dir", str(refs_dir)]
 
     if verbose:
         extra.append("--verbose")
@@ -1631,7 +1633,7 @@ examples:
         else:
             print()
             for candidate in generate_queue:
-                offer_generate(candidate, dry_run=opts.dry_run,
+                offer_generate(candidate, opts.refs, dry_run=opts.dry_run,
                                verbose=opts.verbose)
 
     # Batch mode: fall back to the manual tools for anything unmatched
