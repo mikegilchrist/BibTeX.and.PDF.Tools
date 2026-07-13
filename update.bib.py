@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # ============================================================================
 # Script:       update.bib.py
-# Version:      1.5.0
+# Version:      1.6.0
 # Created:      2026-02-23
-# Revised:      2026-07-12
+# Revised:      2026-07-13
 # Purpose:      Convert bibliography files to BibTeX, generate standardized
 #               citation keys and PDF filenames, update master bibliography.
 #
@@ -14,6 +14,7 @@
 # Usage:        update.bib.py [OPTIONS] N
 #               update.bib.py [OPTIONS] BIBFILE PDFFILE
 #               update.bib.py [OPTIONS] FILE [FILE...]
+#               update.bib.py --undo [ID]
 #
 # Input:        N (integer) -- process N newest bibliography files from
 #                              staging directory (default: /tmp)
@@ -30,10 +31,19 @@
 #               renamed "*-used.ris" (etc.) afterward so re-running N
 #               doesn't reprocess them.
 #
+#               Before any of the above is written, a plan (keys, filenames,
+#               matched PDFs) is printed and confirmed interactively (skip
+#               with -y/--yes). Every real run is logged as a transaction
+#               under /tmp/update.bib.undo/ and can be reversed with
+#               --undo [ID] (defaults to the most recent transaction).
+#               Undo does not cover summarize.files output.
+#
 # Options:
 #   -n, --dry-run     Show what would be done without making changes
 #   -v, --verbose     Show detailed output
 #   -h, --help        Show this help message
+#   -y, --yes         Skip the pre-flight confirmation prompt (and any
+#                     ambiguous-match/generate prompts) -- non-interactive
 #   -d, --dir DIR     Staging directory for batch mode (default: /tmp)
 #   -f, --format FMT  Force input format (ris|bib|nbib|end|endx|xml)
 #   --no-move         Skip PDF move/link step (also skips auto-match)
@@ -45,6 +55,7 @@
 #   --refs DIR        References directory (default: ~/References)
 #   --update-journals Scan a .bib file and fill in empty journal-iso fields
 #   --overwrite-iso   With --update-journals, overwrite existing values
+#   --undo [ID]       Undo a previous run (default: most recent transaction)
 #
 # Requirements:
 #   - Python 3.9+
@@ -60,11 +71,13 @@
 # ============================================================================
 
 import argparse
+import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -82,6 +95,21 @@ try:
     HAS_BIBTEXPARSER = True
 except ImportError:
     HAS_BIBTEXPARSER = False
+
+
+def safe_input(prompt, default=""):
+    """input() that treats EOF/Ctrl-C as a safe default instead of crashing.
+
+    Interactive prompts here are all "skip/decline" style, so losing stdin
+    partway through a run (e.g. non-interactive invocation, closed pipe)
+    should degrade to "don't do the optional thing", not a traceback that
+    aborts before bookkeeping (like the undo transaction record) runs.
+    """
+    try:
+        return input(prompt)
+    except (EOFError, KeyboardInterrupt):
+        print("\n  (no input available -- assuming default)")
+        return default
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -235,6 +263,11 @@ SUPPLEMENTARY_JOURNAL_ABBREVS = {
 DEFAULT_BIB = Path.home() / "BiBTeX" / "bibliography.full.bib"
 DEFAULT_REFS = Path.home() / "References"
 DEFAULT_STAGING = Path("/tmp")
+
+# Where undo transaction records + bib snapshots are kept (see save_transaction
+# / do_undo). Deliberately under /tmp -- a best-effort safety net, not a
+# permanent audit log.
+UNDO_DIR = Path("/tmp") / "update.bib.undo"
 
 # Journal abbreviation data directory (JabRef CSV files)
 _JOURNAL_DATA_DIR = Path(__file__).parent / "data" / "journal_abbreviations"
@@ -1179,7 +1212,8 @@ def process_entry(entry, refs_dir, pdf_path=None, dry_run=False,
 GENERATABLE_EXTS = {".pdf", ".txt"}
 
 
-def find_staging_candidate(bib_file, staging_dir, claimed, verbose=False):
+def find_staging_candidate(bib_file, staging_dir, claimed, verbose=False,
+                           yes=False):
     """Find an unclaimed PDF/txt in staging_dir to pair with bib_file.
 
     Tries an exact basename match first (e.g. foo.ris -> foo.pdf/foo.txt),
@@ -1187,7 +1221,9 @@ def find_staging_candidate(bib_file, staging_dir, claimed, verbose=False):
     Falls back to any unclaimed .pdf/.txt in staging_dir at least as new
     as bib_file (catches downloads whose name doesn't match the citation
     export, e.g. a publisher's DOI-based filename); prompts if more than
-    one qualifies. Returns a Path, or None if nothing found / user skips.
+    one qualifies, unless yes=True (non-interactive), in which case an
+    ambiguous match is skipped rather than guessed. Returns a Path, or
+    None if nothing found / user skips.
     """
     staging_dir = Path(staging_dir)
     base = bib_file.stem
@@ -1216,10 +1252,16 @@ def find_staging_candidate(bib_file, staging_dir, claimed, verbose=False):
             print(f"  Matched by staging-dir scan: {candidates[0]}")
         return candidates[0]
 
+    if yes:
+        names = ", ".join(c.name for c in candidates)
+        print(f"  Multiple candidates for {bib_file.name} ({names}) -- "
+              f"skipping under --yes (re-run interactively to pick one)")
+        return None
+
     print(f"\n  Multiple candidate files in {staging_dir} for {bib_file.name}:")
     for i, c in enumerate(candidates):
         print(f"    {i + 1}) {c.name}")
-    reply = input("  Pick a file to associate (0 to skip): ").strip()
+    reply = safe_input("  Pick a file to associate (0 to skip): ", "0").strip()
     try:
         idx = int(reply)
     except ValueError:
@@ -1229,7 +1271,8 @@ def find_staging_candidate(bib_file, staging_dir, claimed, verbose=False):
     return None
 
 
-def offer_generate(pdf_path, refs_dir, dry_run=False, verbose=False):
+def offer_generate(pdf_path, refs_dir, dry_run=False, verbose=False,
+                   auto_skip=False):
     """Interactively offer to run summarize.files on pdf_path."""
     if pdf_path is None:
         return
@@ -1239,9 +1282,14 @@ def offer_generate(pdf_path, refs_dir, dry_run=False, verbose=False):
               f"for {pdf_path.name}")
         return
 
-    reply = input(
+    if auto_skip:
+        print(f"  Skipping extract/summary offer for {pdf_path.name} "
+              f"(--yes) -- run summarize.files manually if desired")
+        return
+
+    reply = safe_input(
         f"  Generate .txt extract and/or summary .md for {pdf_path.name}? "
-        "(extract/summary/both/n) [n]: "
+        "(extract/summary/both/n) [n]: ", "n"
     ).strip().lower()
 
     if reply in ("both", "y", "yes"):
@@ -1265,16 +1313,159 @@ def offer_generate(pdf_path, refs_dir, dry_run=False, verbose=False):
 
 
 def mark_used(bib_file, dry_run=False, verbose=False):
-    """Rename bib_file to <stem>-used<suffix> so batch mode skips it later."""
+    """Rename bib_file to <stem>-used<suffix> so batch mode skips it later.
+
+    Returns the new Path on success, or None if already marked or dry_run
+    (nothing to record for undo in either case).
+    """
     if "-used" in bib_file.stem:
-        return
+        return None
     used_file = bib_file.with_name(f"{bib_file.stem}-used{bib_file.suffix}")
     if dry_run:
         print(f"  [dry-run] Would mark used: {bib_file} -> {used_file}")
-        return
+        return None
     bib_file.rename(used_file)
     if verbose:
         print(f"  Marked as used: {used_file}")
+    return used_file
+
+
+# ---------------------------------------------------------------------------
+# Undo support
+# ---------------------------------------------------------------------------
+
+def save_transaction(mode, argv, bib_path, bib_snapshot, pdf_ops, renamed,
+                     verbose=False):
+    """Save a transaction record so this run's changes can be undone later.
+
+    Writes a JSON record to /tmp/update.bib.undo/, plus (if bib_snapshot is
+    not None) a full-text snapshot of the bib file exactly as it was before
+    this run's prepend -- kept separate from the rotating Bkups/ dir so
+    undo isn't affected by later runs' backup rotation. Updates the LATEST
+    symlink so `--undo` with no ID picks up the most recent transaction.
+    """
+    UNDO_DIR.mkdir(parents=True, exist_ok=True)
+    txn_id = f"{datetime.now().strftime('%Y%m%d-%H%M%S')}_{uuid.uuid4().hex[:8]}"
+
+    record = {
+        "id": txn_id,
+        "timestamp": datetime.now().isoformat(),
+        "mode": mode,
+        "argv": argv,
+        "bib_path": str(bib_path) if bib_path else None,
+        "bib_snapshot": None,
+        "bib_mtime_after_write": None,
+        "pdf_ops": pdf_ops,
+        "renamed": renamed,
+    }
+
+    if bib_snapshot is not None and bib_path is not None:
+        snapshot_path = UNDO_DIR / f"{txn_id}.bib.snapshot"
+        with open(snapshot_path, "w", encoding="utf-8") as f:
+            f.write(bib_snapshot)
+        record["bib_snapshot"] = str(snapshot_path)
+        record["bib_mtime_after_write"] = Path(bib_path).stat().st_mtime
+
+    json_path = UNDO_DIR / f"{txn_id}.json"
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(record, f, indent=2)
+
+    latest_link = UNDO_DIR / "LATEST"
+    if latest_link.exists() or latest_link.is_symlink():
+        latest_link.unlink()
+    latest_link.symlink_to(json_path.name)
+
+    print(f"\nTransaction id: {txn_id}")
+    print(f"  Undo with: update.bib.py --undo {txn_id}  "
+          f"(or just --undo for the most recent transaction)")
+    if verbose:
+        print(f"  Record: {json_path}")
+
+    return txn_id
+
+
+def do_undo(txn_id, dry_run=False, yes=False, verbose=False):
+    """Reverse a previous run's changes using its saved transaction record."""
+    if txn_id in (None, "LATEST"):
+        latest_link = UNDO_DIR / "LATEST"
+        if not latest_link.exists():
+            print("ERROR: no transactions recorded yet.", file=sys.stderr)
+            return 1
+        json_path = UNDO_DIR / os.readlink(latest_link)
+    else:
+        json_path = UNDO_DIR / f"{txn_id}.json"
+
+    if not json_path.exists():
+        print(f"ERROR: no transaction found: {json_path}", file=sys.stderr)
+        return 1
+
+    with open(json_path, "r", encoding="utf-8") as f:
+        record = json.load(f)
+
+    print(f"Transaction {record['id']} ({record['timestamp']}), "
+          f"mode={record['mode']}")
+    if record["bib_path"]:
+        print(f"  Will restore bib file: {record['bib_path']}")
+    if record["renamed"]:
+        print(f"  Will un-rename {len(record['renamed'])} file(s) from -used")
+    if record["pdf_ops"]:
+        print(f"  Will remove {len(record['pdf_ops'])} copied PDF(s)/symlink(s)")
+    print("  Note: does NOT undo any extract/summary files created by "
+          "summarize.files.")
+
+    bib_path = Path(record["bib_path"]) if record["bib_path"] else None
+    if (bib_path and bib_path.exists() and record["bib_mtime_after_write"]
+            and bib_path.stat().st_mtime != record["bib_mtime_after_write"]):
+        print(f"  WARNING: {bib_path} has been modified since this "
+              f"transaction -- undoing will discard those later changes too.")
+
+    if dry_run:
+        print("[dry-run] No changes made.")
+        return 0
+
+    if not yes:
+        reply = safe_input("Proceed with undo? [y/N]: ", "n").strip().lower()
+        if reply not in ("y", "yes"):
+            print("Aborted.")
+            return 0
+
+    # Reverse renames (most recent first)
+    for r in reversed(record["renamed"]):
+        to_path = Path(r["to"])
+        from_path = Path(r["from"])
+        if to_path.exists():
+            to_path.rename(from_path)
+            if verbose:
+                print(f"  Restored: {from_path}")
+        else:
+            print(f"  WARNING: expected {to_path} not found -- skipping",
+                  file=sys.stderr)
+
+    # Reverse PDF copy/symlink ops
+    for op in reversed(record["pdf_ops"]):
+        link = Path(op["link"])
+        dest = Path(op["dest"])
+        if op.get("link_created") and (link.exists() or link.is_symlink()):
+            link.unlink()
+            if verbose:
+                print(f"  Removed symlink: {link}")
+        if op.get("dest_created") and dest.exists():
+            dest.unlink()
+            if verbose:
+                print(f"  Removed file: {dest}")
+
+    # Restore the bib file from its pre-transaction snapshot
+    if bib_path and record["bib_snapshot"]:
+        snapshot_path = Path(record["bib_snapshot"])
+        if snapshot_path.exists():
+            shutil.copy2(str(snapshot_path), str(bib_path))
+            print(f"  Restored {bib_path} from snapshot")
+        else:
+            print(f"  WARNING: snapshot {snapshot_path} missing -- could "
+                  f"not restore {bib_path}", file=sys.stderr)
+
+    print("Undo complete.")
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -1490,8 +1681,21 @@ examples:
     parser.add_argument("--overwrite-iso", action="store_true",
                         help="With --update-journals, overwrite existing "
                         "journal-iso values (default: skip non-empty)")
+    parser.add_argument("-y", "--yes", action="store_true",
+                        help="Skip the pre-flight confirmation prompt (and "
+                        "any ambiguous-match/generate prompts) -- for "
+                        "non-interactive use")
+    parser.add_argument("--undo", nargs="?", const="LATEST", default=None,
+                        metavar="ID",
+                        help="Undo a previous run's changes (default: most "
+                        "recent transaction). See /tmp/update.bib.undo/")
 
     opts = parser.parse_args(args)
+
+    # --undo mode
+    if opts.undo is not None:
+        return do_undo(opts.undo, dry_run=opts.dry_run, yes=opts.yes,
+                       verbose=opts.verbose)
 
     # --update-journals mode
     if opts.update_journals:
@@ -1548,19 +1752,20 @@ examples:
     if not check_dependencies(formats_needed, verbose=opts.verbose):
         return 1
 
-    # Process each file
-    all_formatted = []
-    claimed_staging = set()
-    generate_queue = []    # candidate PDFs/txts to offer extract/summary for
-    unmatched_files = []   # batch-mode bib_files with no staging match
-    used_files = []        # batch-mode bib_files to mark "-used" at the end
+    # -----------------------------------------------------------------
+    # Phase A: parse every file and compute keys/filenames/PDF matches
+    # up front, WITHOUT writing or moving anything yet. (find_staging_
+    # candidate can still prompt interactively on an ambiguous match --
+    # that's a matching decision, not a write.)
+    # -----------------------------------------------------------------
+    parsed = []
     for bib_file in bib_files:
         if not Path(bib_file).exists():
             print(f"ERROR: file not found: {bib_file}", file=sys.stderr)
             return 1
 
         if opts.verbose:
-            print(f"\nProcessing: {bib_file}")
+            print(f"\nParsing: {bib_file}")
 
         entries = convert_file_to_entries(bib_file, fmt=opts.format)
         if not entries:
@@ -1570,20 +1775,20 @@ examples:
 
         # Batch mode has no explicit PDF -- auto-match one from the staging
         # dir (paired mode already has pdf_path; files mode is left as-is
-        # since those paths were named explicitly by the caller).
+        # since those paths were named explicitly by the caller). Exclude
+        # PDFs already claimed by an earlier file in this same run.
         batch_candidate = None
         if mode == "batch" and not opts.no_move:
+            claimed_staging = {
+                e["entry_pdf"] for item in parsed for e in item["entries"]
+                if e["entry_pdf"]
+            }
             batch_candidate = find_staging_candidate(
-                bib_file, opts.dir, claimed_staging, verbose=opts.verbose)
-            if batch_candidate:
-                claimed_staging.add(batch_candidate)
-            else:
-                unmatched_files.append(bib_file)
+                bib_file, opts.dir, claimed_staging, verbose=opts.verbose,
+                yes=opts.yes)
 
+        entry_plans = []
         for i, entry in enumerate(entries):
-            if opts.verbose:
-                print(f"\nEntry {i + 1}/{len(entries)}:")
-
             # Only associate a PDF with the first entry of a file.
             if mode == "paired" and i == 0:
                 entry_pdf = pdf_path
@@ -1592,34 +1797,100 @@ examples:
             else:
                 entry_pdf = None
 
+            # dry_run=True, no_move=True: pure computation only, never
+            # touches the filesystem, regardless of the real opts.
             formatted, key, filename = process_entry(
                 entry, opts.refs, pdf_path=entry_pdf,
-                dry_run=opts.dry_run, verbose=opts.verbose,
-                no_move=opts.no_move,
+                dry_run=True, verbose=False, no_move=True,
             )
-            all_formatted.append(formatted)
+            entry_plans.append({
+                "entry": entry, "key": key, "filename": filename,
+                "formatted": formatted, "entry_pdf": entry_pdf,
+            })
 
-            print(f"  {key}: {filename}")
+        parsed.append({
+            "bib_file": Path(bib_file), "entries": entry_plans,
+            "batch_candidate": batch_candidate,
+        })
 
-        if mode == "batch":
-            used_files.append(bib_file)
-            if batch_candidate and not opts.no_generate:
-                generate_queue.append(batch_candidate)
-
-    if not all_formatted:
+    if not any(item["entries"] for item in parsed):
         print("No entries to process.", file=sys.stderr)
         return 1
 
-    # Combine all formatted entries
+    # -----------------------------------------------------------------
+    # Phase B: show the plan and confirm before writing anything
+    # -----------------------------------------------------------------
+    print("\nThe following will be processed:")
+    for pi, item in enumerate(parsed, 1):
+        print(f"  [{pi}] {item['bib_file'].name}")
+        for e in item["entries"]:
+            print(f"        {e['key']}: {e['filename']}")
+            if e["entry_pdf"] is not None:
+                print(f"          matched PDF/txt: {e['entry_pdf'].name}")
+        if mode == "batch" and item["batch_candidate"] is None:
+            print(f"          (no PDF/txt matched in {opts.dir})")
+
+    all_formatted = [e["formatted"] for item in parsed for e in item["entries"]]
     combined = "\n\n".join(all_formatted)
 
     if opts.dry_run:
         print(f"\n--- Generated BibTeX ({len(all_formatted)} entries) ---")
         print(combined)
         print("---")
+    elif not opts.yes:
+        reply = safe_input("\nProceed with the above? [y/N]: ", "n").strip().lower()
+        if reply not in ("y", "yes"):
+            print("Aborted.")
+            return 0
 
-    # Prepend to master bibliography
+    # -----------------------------------------------------------------
+    # Phase C: execute -- move/link PDFs, prepend, generate offers,
+    # mark-used. dry_run=opts.dry_run is threaded through so each helper
+    # prints its own "[dry-run] would ..." notice instead of acting.
+    # -----------------------------------------------------------------
+    generate_queue = []    # candidate PDFs/txts to offer extract/summary for
+    unmatched_files = []   # batch-mode bib_files with no staging match
+    used_files = []        # batch-mode bib_files to mark "-used" at the end
+    pdf_ops = []           # for the undo transaction record
+
+    for item in parsed:
+        bib_file = item["bib_file"]
+        if mode == "batch":
+            if item["batch_candidate"] is None:
+                unmatched_files.append(bib_file)
+            else:
+                used_files.append(bib_file)
+                if not opts.no_generate:
+                    generate_queue.append(item["batch_candidate"])
+
+        for e in item["entries"]:
+            entry_pdf = e["entry_pdf"]
+            if entry_pdf and not opts.no_move:
+                dest = Path(opts.refs) / e["filename"]
+                link = Path.cwd() / e["filename"]
+                dest_existed = dest.exists()
+                link_existed = link.exists() or link.is_symlink()
+                moved = move_and_link_pdf(
+                    entry_pdf, e["filename"], opts.refs,
+                    dry_run=opts.dry_run, verbose=opts.verbose,
+                )
+                if moved and not opts.dry_run:
+                    pdf_ops.append({
+                        "src": str(entry_pdf), "dest": str(dest),
+                        "link": str(link),
+                        "dest_created": not dest_existed,
+                        "link_created": not link_existed,
+                    })
+
+    # Snapshot the bib file exactly as it is before we prepend, for undo
+    # (independent of the rotating Bkups/ dir backup_and_prepend also makes).
+    bib_path_obj = Path(opts.bib)
+    bib_snapshot = None
     if not opts.no_prepend:
+        if not opts.dry_run and bib_path_obj.exists():
+            with open(bib_path_obj, "r", encoding="utf-8",
+                      errors="replace") as f:
+                bib_snapshot = f.read()
         backup_and_prepend(combined, opts.bib,
                            dry_run=opts.dry_run, verbose=opts.verbose)
     elif opts.verbose:
@@ -1634,7 +1905,7 @@ examples:
             print()
             for candidate in generate_queue:
                 offer_generate(candidate, opts.refs, dry_run=opts.dry_run,
-                               verbose=opts.verbose)
+                               verbose=opts.verbose, auto_skip=opts.yes)
 
     # Batch mode: fall back to the manual tools for anything unmatched
     if mode == "batch" and unmatched_files:
@@ -1644,9 +1915,22 @@ examples:
         print("or re-run in paired mode: update.bib.py BIBFILE PDFFILE")
 
     # Batch mode: mark processed files "-used" so they're skipped next time
+    renamed = []
     if mode == "batch" and not opts.no_prepend:
         for bib_file in used_files:
-            mark_used(bib_file, dry_run=opts.dry_run, verbose=opts.verbose)
+            used_path = mark_used(bib_file, dry_run=opts.dry_run,
+                                  verbose=opts.verbose)
+            if used_path:
+                renamed.append({"from": str(bib_file), "to": str(used_path)})
+
+    # Record this transaction so it can be undone later (nothing to undo
+    # if this was only a dry run).
+    if not opts.dry_run:
+        save_transaction(
+            mode, list(args),
+            bib_path_obj if not opts.no_prepend else None,
+            bib_snapshot, pdf_ops, renamed, verbose=opts.verbose,
+        )
 
     return 0
 
