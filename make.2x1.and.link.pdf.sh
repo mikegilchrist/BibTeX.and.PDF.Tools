@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================================
 # Script:       make.2x1.and.link.pdf.sh
-# Version:      1.1.0
+# Version:      1.2.0
 # Revised:      2026-08-04
 # Purpose:      Make an n-up (2x1, 2x2, 3x2, ...) version of a PDF
 #
@@ -25,24 +25,16 @@
 # Options:
 #   --no-recompress   Skip the ghostscript pass (see below)
 #
-# Ghostscript pass (added 1.1.0):
-#   pdfxup rebuilds the document through pdflatex using per-page
-#   \includegraphics[viewport=...] clipping.  On PDFs exported from ODP
-#   slides that path re-embeds shared image resources once per page rather
-#   than sharing them, inflating output by 15-60x (measured 2026-08-04: a
-#   3.75 MB lecture deck became 117.67 MB at 2x2).  pdfcrop inflates the
-#   same way, so this is not specific to pdfxup.  A ghostscript rewrite
-#   deduplicates the repeated image XObjects and recovers the size
-#   (117.67 MB -> 3.87 MB) with the crop and page count intact.
-#
-#   The pass is skipped if gs is missing, and its output is discarded --
-#   leaving the pdfxup result untouched -- if gs fails, if the page count
-#   changes, or if the result is not smaller.  Override the quality preset
-#   with MAKEXUP_GS_SETTING (default /prepress, which is the least lossy
-#   preset that still downsamples images above 300 dpi).
+# Ghostscript pass (added 1.1.0; moved to a shared helper in 1.2.0):
+#   pdfxup inflates output 15-60x on PDFs exported from ODP slides.  A
+#   ghostscript rewrite recovers the size with the crop intact.  The full
+#   explanation and the safety guards live in pdf.recompress.sh, which this
+#   script sources.  Opt out with --no-recompress or PDFTOOLS_NO_RECOMPRESS;
+#   override the quality preset with PDFTOOLS_GS_SETTING.
 #
 # Requirements:
 #   - pdfxup (TeX Live package "pdfxup"), pdfinfo, pdfcrop
+#   - pdf.recompress.sh alongside this script
 #   - gs (optional; without it the output is left uncompressed)
 #
 # AI Model:     Claude Opus 5
@@ -55,10 +47,21 @@
 TMPD="${TMPDIR:-/tmp}"
 TMPD="${TMPD%/}"
 
+# Shared ghostscript recompression helper.  Resolve through $0 so this works
+# when invoked via the ~/bin symlinks; readlink -f is used only to find the
+# real directory and does NOT affect the basename dispatch below.
+SRCDIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+if [[ -r "$SRCDIR/pdf.recompress.sh" ]]; then
+    . "$SRCDIR/pdf.recompress.sh"
+else
+    echo "[WARN] $SRCDIR/pdf.recompress.sh not found; recompression disabled"
+    pdf_recompress() { return 1; }
+fi
+
 # --- Options consumed by this script (everything else goes to pdfxup) -----
 RECOMPRESS=1
-[[ -n "$MAKEXUP_NO_RECOMPRESS" ]] && RECOMPRESS=0
-GS_SETTING="${MAKEXUP_GS_SETTING:-/prepress}"
+[[ -n "$PDFTOOLS_NO_RECOMPRESS" || -n "$MAKEXUP_NO_RECOMPRESS" ]] && RECOMPRESS=0
+GS_SETTING="${PDFTOOLS_GS_SETTING:-${MAKEXUP_GS_SETTING:-/prepress}}"
 
 ARGS=()
 for arg in "$@"; do
@@ -247,44 +250,10 @@ echo "Removing temporary file $TMPD/$TMPFILE"
 rm -f "$TMPD/$TMPFILE" || { echo "Failed to remove $TMPD/$TMPFILE ; Exiting"; exit 1; }
 mv "pdfxup.pdf" "$NEWFILE"  || { echo "Failed to copy pdfxup.pdf to $NEWFILE"; exit 1; }
 
-## Ghostscript recompression pass.  See the header for why this is needed.
-## Non-destructive: the pdfxup output is only replaced if gs succeeds, keeps
-## the page count, and actually produces a smaller file.
+## Ghostscript recompression pass.  See pdf.recompress.sh for why this is
+## needed and for the guards that keep it from damaging a good result.
 if [[ "$RECOMPRESS" -eq 1 ]]; then
-    if ! command -v gs &>/dev/null; then
-        echo "[WARN] gs not found; skipping recompression (output may be large)"
-    else
-        SIZE_BEFORE=$(stat -c%s "$NEWFILE" 2>/dev/null)
-        PAGES_BEFORE=$(pdfinfo "$NEWFILE" 2>/dev/null | awk '/^Pages:/ {print $2}')
-        GSTMP="$TMPD/gs-$$-$(basename "$NEWFILE")"
-
-        echo "Recompressing with gs ($GS_SETTING)..."
-        if gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.5 \
-              -dPDFSETTINGS="$GS_SETTING" \
-              -dNOPAUSE -dQUIET -dBATCH \
-              -sOutputFile="$GSTMP" "$NEWFILE" 2>/dev/null; then
-
-            SIZE_AFTER=$(stat -c%s "$GSTMP" 2>/dev/null)
-            PAGES_AFTER=$(pdfinfo "$GSTMP" 2>/dev/null | awk '/^Pages:/ {print $2}')
-
-            if [[ -z "$SIZE_AFTER" || "$SIZE_AFTER" -eq 0 ]]; then
-                echo "[WARN] gs produced an empty file; keeping pdfxup output"
-                rm -f "$GSTMP"
-            elif [[ "$PAGES_BEFORE" != "$PAGES_AFTER" ]]; then
-                echo "[WARN] page count changed ($PAGES_BEFORE -> $PAGES_AFTER); keeping pdfxup output"
-                rm -f "$GSTMP"
-            elif [[ "$SIZE_AFTER" -ge "$SIZE_BEFORE" ]]; then
-                echo "  No reduction ($(( SIZE_BEFORE / 1024 )) KB -> $(( SIZE_AFTER / 1024 )) KB); keeping pdfxup output"
-                rm -f "$GSTMP"
-            else
-                mv "$GSTMP" "$NEWFILE" || { echo "[WARN] failed to install recompressed file; keeping pdfxup output"; rm -f "$GSTMP"; }
-                echo "  Size: $(( SIZE_BEFORE / 1024 )) KB -> $(( SIZE_AFTER / 1024 )) KB ($PAGES_AFTER pages)"
-            fi
-        else
-            echo "[WARN] gs failed; keeping pdfxup output"
-            rm -f "$GSTMP"
-        fi
-    fi
+    pdf_recompress "$NEWFILE" "$GS_SETTING"
 fi
 
 ## Was the input itself a scratch file?  Check both TMPDIR and /tmp, so the
