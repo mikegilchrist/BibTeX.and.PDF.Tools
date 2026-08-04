@@ -125,6 +125,26 @@ echo "New File: $NEWFILE"
 
 cp -Lf "$FILE" "/tmp/$TMPFILE"  || { echo "Failed to copy $FILE to /tmp/$TMPFILE; Exiting"; exit 1; } # need to use {\  and \ } [note spaces] and not () (which starts a subshell)
 
+# Detect offset CropBox: pdfxup uses ghostscript to compute the content bounding box,
+# which reports coordinates in MediaBox space.  pdflatex's viewport= option interprets
+# those coordinates in CropBox-relative space (origin = CropBox lower-left).  When the
+# CropBox lower-left is not at (0,0) the two coordinate systems disagree, causing pdfxup
+# to clip content at the wrong edges.  Pre-cropping with pdfcrop normalizes the PDF so
+# MediaBox == visible area, eliminating the mismatch.
+NEEDS_CROP=$(pdfinfo -box "/tmp/$TMPFILE" 2>/dev/null | awk '
+    /^CropBox:/ { if ($2+0 > 0.5 || $3+0 > 0.5) print "yes" }')
+if [[ "$NEEDS_CROP" == "yes" ]]; then
+    echo "Offset CropBox detected; pre-cropping to normalize coordinates..."
+    CROPPEDTMP="tmp-precrop-$(basename "$FILE")"
+    if pdfcrop --margins 0 "/tmp/$TMPFILE" "/tmp/$CROPPEDTMP"; then
+        rm -f "/tmp/$TMPFILE"
+        TMPFILE="$CROPPEDTMP"
+        echo "Pre-crop complete; using /tmp/$TMPFILE"
+    else
+        echo "[WARN] pdfcrop failed; proceeding without pre-crop (output may have misaligned text)"
+    fi
+fi
+
 
 # -V: Verbosity
 # -fw: Frame weight
