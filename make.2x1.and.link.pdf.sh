@@ -50,6 +50,11 @@
 #               ClaudeAI Opus 5
 # ============================================================================
 
+# Scratch directory.  Honors TMPDIR so the script works where /tmp is not
+# writable (sandboxes, hardened hosts); falls back to /tmp as before.
+TMPD="${TMPDIR:-/tmp}"
+TMPD="${TMPD%/}"
+
 # --- Options consumed by this script (everything else goes to pdfxup) -----
 RECOMPRESS=1
 [[ -n "$MAKEXUP_NO_RECOMPRESS" ]] && RECOMPRESS=0
@@ -184,7 +189,7 @@ NEWFILE="${FILE/.pdf/-$SUFF.pdf}"
 echo "Tmp File: $TMPFILE"
 echo "New File: $NEWFILE"
 
-cp -Lf "$FILE" "/tmp/$TMPFILE"  || { echo "Failed to copy $FILE to /tmp/$TMPFILE; Exiting"; exit 1; } # need to use {\  and \ } [note spaces] and not () (which starts a subshell)
+cp -Lf "$FILE" "$TMPD/$TMPFILE"  || { echo "Failed to copy $FILE to $TMPD/$TMPFILE; Exiting"; exit 1; } # need to use {\  and \ } [note spaces] and not () (which starts a subshell)
 
 # Detect offset CropBox: pdfxup uses ghostscript to compute the content bounding box,
 # which reports coordinates in MediaBox space.  pdflatex's viewport= option interprets
@@ -192,15 +197,15 @@ cp -Lf "$FILE" "/tmp/$TMPFILE"  || { echo "Failed to copy $FILE to /tmp/$TMPFILE
 # CropBox lower-left is not at (0,0) the two coordinate systems disagree, causing pdfxup
 # to clip content at the wrong edges.  Pre-cropping with pdfcrop normalizes the PDF so
 # MediaBox == visible area, eliminating the mismatch.
-NEEDS_CROP=$(pdfinfo -box "/tmp/$TMPFILE" 2>/dev/null | awk '
+NEEDS_CROP=$(pdfinfo -box "$TMPD/$TMPFILE" 2>/dev/null | awk '
     /^CropBox:/ { if ($2+0 > 0.5 || $3+0 > 0.5) print "yes" }')
 if [[ "$NEEDS_CROP" == "yes" ]]; then
     echo "Offset CropBox detected; pre-cropping to normalize coordinates..."
     CROPPEDTMP="tmp-precrop-$(basename "$FILE")"
-    if pdfcrop --margins 0 "/tmp/$TMPFILE" "/tmp/$CROPPEDTMP"; then
-        rm -f "/tmp/$TMPFILE"
+    if pdfcrop --margins 0 "$TMPD/$TMPFILE" "$TMPD/$CROPPEDTMP"; then
+        rm -f "$TMPD/$TMPFILE"
         TMPFILE="$CROPPEDTMP"
-        echo "Pre-crop complete; using /tmp/$TMPFILE"
+        echo "Pre-crop complete; using $TMPD/$TMPFILE"
     else
         echo "[WARN] pdfcrop failed; proceeding without pre-crop (output may have misaligned text)"
     fi
@@ -223,7 +228,7 @@ pdfxup \
   -y "$ROW" \
   -is "$ISP" \
   -ps "letter" \
-  -o pdfxup.pdf $OPTARGS "/tmp/$TMPFILE" || { echo "Failed to run pdfxup on /tmp/$TMPFILE; Exiting"; exit 1; } 
+  -o pdfxup.pdf $OPTARGS "$TMPD/$TMPFILE" || { echo "Failed to run pdfxup on $TMPD/$TMPFILE; Exiting"; exit 1; }
 # NOTE: Don't put quotes around $OPTARGS.  That screws things up, I don't kvnow why.
 #       Perhaps because it is already a string?
 #
@@ -238,8 +243,8 @@ pdfxup \
 #	exit 1
 #fi
 
-echo "Removing temporary file /tmp/$TMPFILE"
-rm -f "/tmp/$TMPFILE" || { echo "Failed to remove /tmp/$TMPFILE ; Exiting"; exit 1; }
+echo "Removing temporary file $TMPD/$TMPFILE"
+rm -f "$TMPD/$TMPFILE" || { echo "Failed to remove $TMPD/$TMPFILE ; Exiting"; exit 1; }
 mv "pdfxup.pdf" "$NEWFILE"  || { echo "Failed to copy pdfxup.pdf to $NEWFILE"; exit 1; }
 
 ## Ghostscript recompression pass.  See the header for why this is needed.
@@ -251,7 +256,7 @@ if [[ "$RECOMPRESS" -eq 1 ]]; then
     else
         SIZE_BEFORE=$(stat -c%s "$NEWFILE" 2>/dev/null)
         PAGES_BEFORE=$(pdfinfo "$NEWFILE" 2>/dev/null | awk '/^Pages:/ {print $2}')
-        GSTMP="/tmp/gs-$$-$(basename "$NEWFILE")"
+        GSTMP="$TMPD/gs-$$-$(basename "$NEWFILE")"
 
         echo "Recompressing with gs ($GS_SETTING)..."
         if gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.5 \
@@ -282,7 +287,9 @@ if [[ "$RECOMPRESS" -eq 1 ]]; then
     fi
 fi
 
-if [[ "$FILE" == "/tmp/"* ]]; then
+## Was the input itself a scratch file?  Check both TMPDIR and /tmp, so the
+## prompt still fires for a file sitting in /tmp when TMPDIR points elsewhere.
+if [[ "$FILE" == "$TMPD/"* || "$FILE" == "/tmp/"* ]]; then
     echo "Move $NEWFILE to local directory? (y)/n"
     read TMP;
     if [[ $TMP != "n" || $TMP != "N" ]]; then
