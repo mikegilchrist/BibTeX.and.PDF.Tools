@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # ============================================================================
 # Script:       update.bib.py
-# Version:      1.6.0
+# Version:      1.9.0
 # Created:      2026-02-23
-# Revised:      2026-07-13
+# Revised:      2026-07-29
 # Purpose:      Convert bibliography files to BibTeX, generate standardized
 #               citation keys and PDF filenames, update master bibliography.
 #
@@ -21,12 +21,15 @@
 #               BIBFILE PDFFILE -- one bibliography file + one PDF (paired)
 #               FILE...  -- one or more bibliography files
 # Output:       Formatted BibTeX entries prepended to master bibliography.
-#               PDFs moved to ~/References/ with symlinks in cwd.
+#               PDFs COPIED to ~/References/ with symlinks in cwd. The
+#               staged original is left in place (clear /tmp yourself), so
+#               an --undo only has to delete the copy.
 #
 #               In batch (N) mode, a matching PDF/txt is auto-detected in
-#               the staging dir (basename match first, then any unclaimed
-#               file newer than the bib file, prompting if ambiguous),
-#               copied/linked the same as paired mode, then you're offered
+#               the staging dir -- by basename, then by DOI appearing in the
+#               file's name, then by stem overlap, and finally by mtime
+#               (within --pdf-window of the citation file, prompting if
+#               ambiguous) -- copied/linked as in paired mode, then offered
 #               an extract/summary via summarize.files. Processed files are
 #               renamed "*-used.ris" (etc.) afterward so re-running N
 #               doesn't reprocess them.
@@ -46,6 +49,9 @@
 #                     ambiguous-match/generate prompts) -- non-interactive
 #   -d, --dir DIR     Staging directory for batch mode (default: /tmp)
 #   -f, --format FMT  Force input format (ris|bib|nbib|end|endx|xml)
+#   --pdf-window MIN  Batch mode: how much older than the citation file a
+#                     staging PDF may be and still match on mtime alone
+#                     (default: 720, i.e. 12h; 0 = ignore age)
 #   --no-move         Skip PDF move/link step (also skips auto-match)
 #   --no-generate     Skip the extract/summary prompt (batch mode)
 #   --no-prepend      Skip prepending to master bibliography (also skips
@@ -74,9 +80,11 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
+import unicodedata
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -417,6 +425,64 @@ _journal_db = JournalAbbreviations()
 # BibTeX entry parsing
 # ---------------------------------------------------------------------------
 
+def strip_ris_terminator(value):
+    """Strip a stray RIS "ER" record terminator off the end of a field value.
+
+    Some conversions leave the terminator glued to the last field. The
+    terminator always appears on its own line (or after the multi-space
+    "ER  - " tag column), so require that shape -- a bare single-space " ER"
+    is ordinary prose ("Protein folding in the ER") and must survive.
+    """
+    if value is None:
+        return ""
+    return re.sub(r'(?:\r?\n|[ \t]{2,})ER[ \t]*-?[ \t]*$', '',
+                  str(value)).rstrip()
+
+
+def clean_doi(doi):
+    """Normalize a DOI: strip label prefixes, resolver URLs, and stray "ER".
+
+    Citation exports are inconsistent about this -- Cambridge Core writes
+    "DO  - DOI: 10.1017/S0031182000055207", others emit a full
+    https://doi.org/... URL. The bib field should hold the bare DOI.
+    """
+    doi = strip_ris_terminator(doi).strip()
+    if not doi:
+        return ""
+    # Strip any stack of leading labels/resolvers, e.g. "DOI: https://doi.org/10..."
+    while True:
+        stripped = re.sub(
+            r'^(?:https?://(?:dx\.)?doi\.org/|https?://doi\.org/|doi\s*[:=]\s*)',
+            '', doi, flags=re.IGNORECASE)
+        stripped = stripped.strip()
+        if stripped == doi:
+            break
+        doi = stripped
+    # A DOI contains no whitespace, so anything past the first space is
+    # trailing junk (a stray "ER" terminator, a "[doi]" tag, a comment).
+    return re.split(r'\s', doi, maxsplit=1)[0]
+
+
+def extract_pmid(notes):
+    """Pull a PMID out of a RIS notes (N1) field, if one is actually there.
+
+    N1 is a free-text field: PubMed exports put "PMID: 12345678" in it, but
+    publishers routinely use it for something else entirely (Science journals
+    put the DOI there). Returning that verbatim writes a DOI into the pmid
+    field, so only accept something that looks like a PMID.
+    """
+    if not notes:
+        return ""
+    text = strip_ris_terminator(notes).strip()
+    m = re.search(r'\bPMID\s*[:=]?\s*(\d{4,9})\b', text, flags=re.IGNORECASE)
+    if m:
+        return m.group(1)
+    # A bare all-digits note is a PMID; anything else (a DOI, a comment) is not.
+    if re.fullmatch(r'\d{4,9}', text):
+        return text
+    return ""
+
+
 def parse_bibtex_string(text):
     """Parse BibTeX string into a list of entry dicts.
 
@@ -558,7 +624,7 @@ def _parse_ris_with_rispy(filepath):
             "end_page": "_end_page",
             "abstract": "abstract",
             "doi": "doi",
-            "notes": "pmid",  # PMID sometimes stored in notes
+            "notes": "_notes",  # free text; may or may not hold a PMID
         }
         for ris_key, bib_key in field_map.items():
             val = ris.get(ris_key)
@@ -567,11 +633,22 @@ def _parse_ris_with_rispy(filepath):
                     val = "; ".join(str(v) for v in val)
                 d[bib_key] = str(val)
 
+        # N1/notes is free text -- take a PMID from it only if there is one.
+        notes = d.pop("_notes", None)
+        pmid = extract_pmid(notes)
+        if pmid:
+            d["pmid"] = pmid
+
+        if "doi" in d:
+            d["doi"] = clean_doi(d["doi"])
+
         # Combine start/end pages
         sp = d.pop("_start_page", None)
         ep = d.pop("_end_page", None)
-        if sp:
-            d["pages"] = f"{sp}-{ep}" if ep else sp
+        if sp and ep:
+            d["pages"] = f"{sp}-{ep}"
+        elif sp or ep:
+            d["pages"] = sp or ep
 
         # Year extraction: rispy may return "2012/03/15" or "2012"
         if "year" in d:
@@ -596,8 +673,9 @@ def _parse_via_bibutils(filepath, fmt):
         # Already MODS XML, just pipe to xml2bib
         cmd = ["xml2bib", "-nb", filepath]
     elif converter:
-        # Two-stage: format2xml | xml2bib
-        cmd_str = f'{converter} "{filepath}" | xml2bib -nb'
+        # Two-stage: format2xml | xml2bib. Quote the path -- staged filenames
+        # come from the browser's Downloads and can contain anything.
+        cmd_str = f'{converter} {shlex.quote(str(filepath))} | xml2bib -nb'
         result = subprocess.run(
             cmd_str, shell=True, capture_output=True, text=True
         )
@@ -704,9 +782,10 @@ def _to_initials(firstnames):
     """Convert firstnames to initials: 'John Michael' -> 'J. M.'"""
     if not firstnames:
         return ""
-    # If already initials like "J. M.", normalize spacing
-    # Remove lowercase letters (keep only uppercase initials)
-    initials = re.findall(r'[A-Z]', firstnames)
+    # If already initials like "J. M.", normalize spacing.
+    # Keep every uppercase letter, accented ones included -- [A-Z] silently
+    # dropped the initial of names like "Emile" spelled with an accent.
+    initials = [ch for ch in firstnames if ch.isupper()]
     if initials:
         return ". ".join(initials) + "."
     # Edge case: all lowercase (shouldn't happen, but be safe)
@@ -718,23 +797,71 @@ def _to_initials(firstnames):
 # Key and filename generation
 # ---------------------------------------------------------------------------
 
+# Letters NFKD will not decompose into "base character + combining mark",
+# so they need an explicit transliteration for ASCII citation keys.
+_ASCII_FOLD = {
+    "ø": "o", "Ø": "O",      # o-slash
+    "æ": "ae", "Æ": "AE",    # ae ligature
+    "œ": "oe", "Œ": "OE",    # oe ligature
+    "ß": "ss",                     # sharp s
+    "đ": "d", "Đ": "D",      # d-stroke
+    "ł": "l", "Ł": "L",      # l-stroke
+    "þ": "th", "Þ": "Th",    # thorn
+    "ð": "d", "Ð": "D",      # eth
+    "ı": "i",                      # dotless i
+}
+
+
+def to_ascii_key_text(text):
+    """Transliterate text to plain ASCII for use in a citation key.
+
+    Diacritics are folded onto their base letter rather than deleted --
+    stripping [^A-Za-z0-9] outright turned Mueller-with-umlaut into
+    "Mller" and Gomez-with-accent into "Gmez", misspelling the name.
+    """
+    if not text:
+        return ""
+    text = "".join(_ASCII_FOLD.get(ch, ch) for ch in text)
+    decomposed = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+
+
+def _surname_for_key(surname):
+    """Normalize one surname for use in a citation key.
+
+    - accents folded to their base letter (Mueller-with-umlaut -> Muller)
+    - an internal HYPHEN is KEPT, because it is part of the name
+      (Palacios-Blanco -> Palacios-Blanco)
+    - a space between two surnames is closed up, not replaced
+      (Martinez Sanchez -> MartinezSanchez)
+    - every other character (apostrophes, periods, commas) is dropped
+    """
+    s = to_ascii_key_text(surname)
+    s = re.sub(r'[^A-Za-z0-9-]', '', s)
+    # Collapse hyphen runs and drop any left dangling at either end
+    return re.sub(r'-{2,}', '-', s).strip('-')
+
+
 def generate_key(authors, year):
     """Generate a BibTeX citation key from authors and year.
 
     1 author:   Surname + Year         -> Smith2012
     2 authors:  Surname1AndSurname2Year -> SmithAndJones2012
     3+ authors: Surname1EtAlYear       -> SmithEtAl2012
+
+    Surnames are transliterated to ASCII and keep their hyphens:
+    Palacios-Blanco + Martin-Castellanos ->
+    Palacios-BlancoAndMartin-Castellanos2022.
     """
     if not authors:
         return f"Unknown{year}"
-    if len(authors) == 1:
-        key = authors[0][0]
-    elif len(authors) == 2:
-        key = f"{authors[0][0]}And{authors[1][0]}"
+    surnames = [_surname_for_key(a[0]) for a in authors]
+    if len(surnames) == 1:
+        key = surnames[0]
+    elif len(surnames) == 2:
+        key = f"{surnames[0]}And{surnames[1]}"
     else:
-        key = f"{authors[0][0]}EtAl"
-    # Remove spaces and non-alphanumeric chars from key
-    key = re.sub(r'[^A-Za-z0-9]', '', key)
+        key = f"{surnames[0]}EtAl"
     return f"{key}{year}"
 
 
@@ -926,7 +1053,7 @@ def format_bibtex_entry(entry, key, filename, refs_dir):
         if value is None:
             value = ""
         # Clean up "ER" artifacts from ISI conversion
-        value = re.sub(r'\s*ER\s*$', '', str(value))
+        value = strip_ris_terminator(value)
         # Protect case-sensitive words in title field
         if display_name == "title":
             value = protect_bibtex_title(value)
@@ -939,16 +1066,15 @@ def format_bibtex_entry(entry, key, filename, refs_dir):
     # timestamp
     lines.append(f"\ttimestamp  = {{{timestamp}}},")
 
-    # pmid
+    # pmid -- only ever a bare number; a DOI or free-text note is dropped
     pmid = entry.get("pmid", "")
     if pmid:
-        pmid = re.sub(r'\s*ER\s*$', '', str(pmid))
+        pmid = extract_pmid(pmid)
     lines.append(f"\tpmid\t   = {{{pmid}}},")
 
     # doi (last field, no trailing comma)
-    doi = entry.get("doi", "")
+    doi = clean_doi(entry.get("doi", ""))
     if doi:
-        doi = re.sub(r'\s*ER\s*$', '', str(doi))
         lines.append(f"\tdoi\t  = {{{doi}}}")
     else:
         # Remove trailing comma from pmid line
@@ -961,6 +1087,17 @@ def format_bibtex_entry(entry, key, filename, refs_dir):
 # ---------------------------------------------------------------------------
 # File operations
 # ---------------------------------------------------------------------------
+
+def _bkup2_name(bib_name):
+    """Second-generation backup name: foo.bib -> foo.bkup.
+
+    Falls back to appending .bkup when the name has no .bib suffix, so the
+    rotation never ends up copying a file onto itself (SameFileError).
+    """
+    if bib_name.endswith(".bib"):
+        return bib_name[:-4] + ".bkup"
+    return bib_name + ".bkup"
+
 
 def backup_and_prepend(new_text, bib_path, dry_run=False, verbose=False):
     """Prepend new BibTeX entries to the master bibliography file.
@@ -993,7 +1130,7 @@ def backup_and_prepend(new_text, bib_path, dry_run=False, verbose=False):
 
     bib_name = bib_path.name
     bkup_path = bkups_dir / bib_name
-    bkup2_path = bkups_dir / bib_name.replace(".bib", ".bkup")
+    bkup2_path = bkups_dir / _bkup2_name(bib_name)
 
     # Rotate backups
     if bkup_path.exists():
@@ -1181,7 +1318,7 @@ def process_entry(entry, refs_dir, pdf_path=None, dry_run=False,
                   verbose=False, no_move=False):
     """Process a single bibliography entry.
 
-    Generates key and filename, optionally moves PDF.
+    Generates key and filename, optionally copies the PDF into refs_dir.
     Returns (formatted_bibtex, key, filename) tuple.
     """
     authors = parse_authors(entry.get("author", ""))
@@ -1211,23 +1348,88 @@ def process_entry(entry, refs_dir, pdf_path=None, dry_run=False,
 
 GENERATABLE_EXTS = {".pdf", ".txt"}
 
+# Default age tolerance for the time-window fallback, in minutes. The window
+# is one-sided: a staging file may be arbitrarily NEWER than the citation
+# file, but no more than this much OLDER. (Downloading the PDF before
+# exporting the citation is the common case, so the "older" side is what
+# actually needs slack.)
+DEFAULT_PDF_WINDOW_MIN = 12 * 60
 
-def find_staging_candidate(bib_file, staging_dir, claimed, verbose=False,
+# Shortest shared run of characters accepted as a stem-substring match --
+# below this, unrelated names collide too easily ("data.pdf" vs "metadata").
+MIN_STEM_OVERLAP = 8
+
+
+def _norm_stem(text):
+    """Lowercase and strip separators, so DOI-ish names compare cleanly.
+
+    "10.1038_s41598-020-75909-6-citation" -> "101038s4159802075909 6citation"
+    (minus the space -- all of . _ - and whitespace are removed).
+    """
+    return re.sub(r"[\s._\-/]+", "", text.lower())
+
+
+def _doi_tokens(entry):
+    """Normalized match tokens derived from an entry's DOI.
+
+    For doi 10.1038/s41598-020-75909-6 this yields the whole DOI and its
+    suffix, normalized -- publishers name the PDF after one or the other.
+    """
+    if not entry:
+        return []
+    doi = clean_doi(entry.get("doi"))
+    if not doi:
+        return []
+    tokens = [doi]
+    if "/" in doi:
+        tokens.append(doi.split("/", 1)[1])
+    return [t for t in (_norm_stem(t) for t in tokens)
+            if len(t) >= MIN_STEM_OVERLAP]
+
+
+def _describe_age(delta):
+    """Human-readable age of a staging file relative to the citation file."""
+    direction = "newer" if delta >= 0 else "older"
+    secs = abs(delta)
+    if secs < 90:
+        return f"{secs:.0f}s {direction}"
+    if secs < 5400:
+        return f"{secs / 60:.0f}m {direction}"
+    if secs < 172800:
+        return f"{secs / 3600:.1f}h {direction}"
+    return f"{secs / 86400:.1f}d {direction}"
+
+
+def find_staging_candidate(bib_file, staging_dir, claimed, entry=None,
+                           window_min=DEFAULT_PDF_WINDOW_MIN, verbose=False,
                            yes=False):
     """Find an unclaimed PDF/txt in staging_dir to pair with bib_file.
 
-    Tries an exact basename match first (e.g. foo.ris -> foo.pdf/foo.txt),
-    since that's what most manually-saved citation exports look like.
-    Falls back to any unclaimed .pdf/.txt in staging_dir at least as new
-    as bib_file (catches downloads whose name doesn't match the citation
-    export, e.g. a publisher's DOI-based filename); prompts if more than
-    one qualifies, unless yes=True (non-interactive), in which case an
-    ambiguous match is skipped rather than guessed. Returns a Path, or
-    None if nothing found / user skips.
+    Strategies, most specific first -- the first three identify a file by
+    NAME and so ignore its age entirely:
+
+      1. exact basename    foo.ris -> foo.pdf / foo.txt
+      2. DOI               entry's doi (or its suffix) appears in the
+                           staging file's name, e.g. doi
+                           10.1038/s41598-020-75909-6 -> s41598-020-75909-6.pdf
+      3. stem substring    one normalized stem contains the other (>=
+                           MIN_STEM_OVERLAP chars) -- catches a DOI-named
+                           citation export next to a publisher-named PDF
+                           even when the entry carries no doi field
+      4. time window       any unclaimed .pdf/.txt whose mtime is within
+                           window_min minutes BEFORE bib_file (or any amount
+                           after it), nearest in time first
+
+    Only strategy 4 can be ambiguous; if it yields more than one candidate
+    the user picks, unless yes=True (non-interactive), in which case the
+    match is skipped rather than guessed. Strategies 1-3 are name-based
+    evidence rather than a guess, so a unique hit there is taken even under
+    --yes. Returns a Path, or None if nothing found / user skips.
     """
     staging_dir = Path(staging_dir)
     base = bib_file.stem
 
+    # 1. Exact basename.
     for ext in (".pdf", ".txt"):
         exact = staging_dir / f"{base}{ext}"
         if exact.exists() and exact not in claimed:
@@ -1235,13 +1437,39 @@ def find_staging_candidate(bib_file, staging_dir, claimed, verbose=False,
                 print(f"  Matched by basename: {exact}")
             return exact
 
+    pool = sorted(p for p in staging_dir.iterdir()
+                  if p.is_file()
+                  and p.suffix.lower() in GENERATABLE_EXTS
+                  and p not in claimed)
+
+    # 2. DOI appears in the staging file's name.
+    for token in _doi_tokens(entry):
+        hits = [p for p in pool if token in _norm_stem(p.stem)]
+        if len(hits) == 1:
+            if verbose:
+                print(f"  Matched by DOI ({token}): {hits[0]}")
+            return hits[0]
+
+    # 3. Either normalized stem contains the other.
+    bib_norm = _norm_stem(base)
+    hits = []
+    for p in pool:
+        p_norm = _norm_stem(p.stem)
+        if len(p_norm) < MIN_STEM_OVERLAP or len(bib_norm) < MIN_STEM_OVERLAP:
+            continue
+        if p_norm in bib_norm or bib_norm in p_norm:
+            hits.append(p)
+    if len(hits) == 1:
+        if verbose:
+            print(f"  Matched by filename overlap: {hits[0]}")
+        return hits[0]
+
+    # 4. Time window, nearest to the citation file first.
     bib_mtime = bib_file.stat().st_mtime
+    oldest = -1e18 if window_min <= 0 else bib_mtime - window_min * 60
     candidates = sorted(
-        (p for p in staging_dir.iterdir()
-         if p.suffix.lower() in GENERATABLE_EXTS
-         and p not in claimed
-         and p.stat().st_mtime >= bib_mtime),
-        key=lambda p: p.stat().st_mtime,
+        (p for p in pool if p.stat().st_mtime >= oldest),
+        key=lambda p: abs(p.stat().st_mtime - bib_mtime),
     )
 
     if not candidates:
@@ -1260,7 +1488,8 @@ def find_staging_candidate(bib_file, staging_dir, claimed, verbose=False,
 
     print(f"\n  Multiple candidate files in {staging_dir} for {bib_file.name}:")
     for i, c in enumerate(candidates):
-        print(f"    {i + 1}) {c.name}")
+        age = _describe_age(c.stat().st_mtime - bib_mtime)
+        print(f"    {i + 1}) {c.name}  ({age})")
     reply = safe_input("  Pick a file to associate (0 to skip): ", "0").strip()
     try:
         idx = int(reply)
@@ -1616,7 +1845,7 @@ def update_journal_iso(bib_path, dry_run=False, verbose=False,
     bkups_dir = bib_path.parent / "Bkups"
     bkups_dir.mkdir(parents=True, exist_ok=True)
     bkup_path = bkups_dir / bib_path.name
-    bkup2_path = bkups_dir / bib_path.name.replace(".bib", ".bkup")
+    bkup2_path = bkups_dir / _bkup2_name(bib_path.name)
     if bkup_path.exists():
         shutil.copy2(str(bkup_path), str(bkup2_path))
     shutil.copy2(str(bib_path), str(bkup_path))
@@ -1645,7 +1874,7 @@ modes:
 
 examples:
   update.bib.py 3                  Process 3 newest .ris/.bib files from /tmp
-  update.bib.py paper.ris paper.pdf   Convert RIS, rename+move PDF
+  update.bib.py paper.ris paper.pdf   Convert RIS, rename+copy PDF
   update.bib.py --dry-run ref1.bib ref2.ris   Preview without changes
   update.bib.py --update-journals --dry-run    Preview journal-iso updates
 """,
@@ -1663,8 +1892,17 @@ examples:
     parser.add_argument("-f", "--format",
                         choices=list(BIBUTILS_CONVERTERS.keys()),
                         help="Force input format instead of auto-detecting")
+    parser.add_argument("--pdf-window", type=float,
+                        default=DEFAULT_PDF_WINDOW_MIN, metavar="MINUTES",
+                        help=f"Batch mode: how much OLDER than the citation "
+                        f"file a staging PDF may be and still be considered "
+                        f"a match by the time-window fallback (default: "
+                        f"{DEFAULT_PDF_WINDOW_MIN:g}, i.e. "
+                        f"{DEFAULT_PDF_WINDOW_MIN / 60:g}h; 0 = ignore age). "
+                        f"Name-based matches (basename, DOI, stem overlap) "
+                        f"ignore this.")
     parser.add_argument("--no-move", action="store_true",
-                        help="Skip PDF move/link step")
+                        help="Skip PDF copy/link step")
     parser.add_argument("--no-generate", action="store_true",
                         help="Skip the extract/summary prompt after PDF "
                         "association (batch mode)")
@@ -1784,7 +2022,8 @@ examples:
                 if e["entry_pdf"]
             }
             batch_candidate = find_staging_candidate(
-                bib_file, opts.dir, claimed_staging, verbose=opts.verbose,
+                bib_file, opts.dir, claimed_staging, entry=entries[0],
+                window_min=opts.pdf_window, verbose=opts.verbose,
                 yes=opts.yes)
 
         entry_plans = []
@@ -1827,6 +2066,13 @@ examples:
             print(f"        {e['key']}: {e['filename']}")
             if e["entry_pdf"] is not None:
                 print(f"          matched PDF/txt: {e['entry_pdf'].name}")
+                # A same-named file in refs is silently overwritten by the
+                # copy below and is NOT recoverable via --undo, so say so
+                # here while there is still a chance to abort.
+                existing = Path(opts.refs) / e["filename"]
+                if existing.exists() and not opts.no_move:
+                    print(f"          WARNING: {existing} already exists "
+                          f"and will be OVERWRITTEN (not undoable)")
         if mode == "batch" and item["batch_candidate"] is None:
             print(f"          (no PDF/txt matched in {opts.dir})")
 

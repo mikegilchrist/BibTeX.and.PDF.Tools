@@ -4,9 +4,15 @@
 
 Personal reference management toolchain. Converts bibliography files
 (RIS, BibTeX, NBIB, EndNote) into standardized BibTeX entries with
-custom citation keys, generates descriptive PDF filenames, moves PDFs
+custom citation keys, generates descriptive PDF filenames, copies PDFs
 to a central ~/References/ directory, and creates symlinks in project
 directories.
+
+Note: update.bib.py COPIES the staged PDF (shutil.copy2) rather than
+moving it -- the original stays in /tmp as a safety net until you clear
+it, which is also what makes `--undo` safe (it only deletes the copy).
+The older shell scripts (move.and.link.sh, rename.move.and.link.sh) do
+move.
 
 ## Key Filesystem Paths
 
@@ -36,6 +42,28 @@ Author_YYYY_title.words.separated.by.periods_Journal.Name.pdf
 3+ authors: SmithEtAl2012
 ```
 
+Surname handling in keys:
+
+| Case                        | Example                    | Key form            |
+|-----------------------------|----------------------------|---------------------|
+| Accented letter             | Mueller (umlaut)           | Muller2023          |
+| Accented letter             | Bjornstad (o-slash)        | BjornstadEtAl2020   |
+| HYPHENATED surname          | Palacios-Blanco            | Palacios-Blanco2022 |
+| Two surnames, NO hyphen     | Martinez Sanchez           | MartinezSanchez2022 |
+| Apostrophe / period / comma | O'Brien                    | OBrien2019          |
+
+- Keys are plain ASCII: accents are folded onto the base letter, never
+  deleted (deleting produced misspellings like "Mller").
+- A hyphen is KEPT -- it is part of the name.
+- A space between two surnames is closed up with NO separator, giving
+  Last1Last2, not Last1-Last2 or Last1.Last2.
+- PDF *filenames* keep the original spelling; only the key is folded.
+
+Historical note: ~19 keys already in bibliography.full.bib retain
+accents (MuellerEtAl2023 spelled with the umlaut). Those came from the
+legacy Perl pipeline and are left alone; new entries follow the rules
+above.
+
 ### BibTeX entry format
 ```bibtex
 @article{SmithEtAl2012,
@@ -63,7 +91,7 @@ Author_YYYY_title.words.separated.by.periods_Journal.Name.pdf
 ### Primary tool
 | Script | Language | Purpose |
 |--------|----------|---------|
-| update.bib.py | Python | Main tool: convert bib files, generate keys/filenames, move PDFs |
+| update.bib.py | Python | Main tool: convert bib files, generate keys/filenames, copy PDFs |
 
 ### Legacy pipeline (Perl/Bash)
 | Script | Language | Purpose |
